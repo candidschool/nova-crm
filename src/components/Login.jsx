@@ -72,7 +72,7 @@ const Login = ({ onLogin }) => {
                         width: '100%',
                         maxWidth: '140px',
                         height: 'auto',
-                        marginBottom: '20px',
+                        marginBottom: '0px',
                         marginLeft:'20px',
                         cursor: 'pointer'
                       }}
