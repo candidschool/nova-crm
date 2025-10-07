@@ -164,7 +164,7 @@ export default async function handler(req, res) {
     const dbData = convertToDatabase(req.body);
 
     const { data: newLead, error: insertError } = await supabase
-      .from('Leads')
+      .from('nova_leads')
       .insert([dbData])
       .select()
       .single();
