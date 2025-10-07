@@ -2156,6 +2156,7 @@
 
 .login-content {
   display: grid;
+  gap:0;
   max-width: 1200px;
   width: 50%;
   min-height: 600px;
