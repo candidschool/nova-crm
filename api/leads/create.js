@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -15,7 +16,6 @@ const API_USERNAME = process.env.API_USERNAME;
 const API_PASSWORD = process.env.API_PASSWORD;
 
 function authenticate(req) {
-  // Check if environment variables are set
   if (!API_USERNAME || !API_PASSWORD) {
     return { success: false, error: 'Server configuration error: credentials not set' };
   }
@@ -32,6 +32,172 @@ function authenticate(req) {
   
   return { success: true };
 }
+
+// Email transporter setup
+const createEmailTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT),
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASSWORD
+    }
+  });
+};
+
+// Send email notification
+const sendEmailNotification = async (leadData) => {
+  try {
+    const transporter = createEmailTransporter();
+    
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+          .field { margin: 10px 0; padding: 10px; background-color: white; border-left: 3px solid #4CAF50; }
+          .label { font-weight: bold; color: #555; }
+          .value { color: #333; margin-left: 10px; }
+          .footer { text-align: center; padding: 20px; color: #777; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>🎉 New Lead Created</h2>
+          </div>
+          <div class="content">
+            <p>A new lead has been added to the system via API.</p>
+            
+            <div class="field">
+              <span class="label">Parent Name:</span>
+              <span class="value">${leadData.parents_name}</span>
+            </div>
+            
+            <div class="field">
+              <span class="label">Kid Name:</span>
+              <span class="value">${leadData.kids_name}</span>
+            </div>
+            
+            <div class="field">
+              <span class="label">Phone:</span>
+              <span class="value">${leadData.phone}</span>
+            </div>
+            
+            ${leadData.second_phone ? `
+            <div class="field">
+              <span class="label">Secondary Phone:</span>
+              <span class="value">${leadData.second_phone}</span>
+            </div>
+            ` : ''}
+            
+            ${leadData.email ? `
+            <div class="field">
+              <span class="label">Email:</span>
+              <span class="value">${leadData.email}</span>
+            </div>
+            ` : ''}
+            
+            <div class="field">
+              <span class="label">Grade:</span>
+              <span class="value">${leadData.grade}</span>
+            </div>
+            
+            ${leadData.location ? `
+            <div class="field">
+              <span class="label">Location:</span>
+              <span class="value">${leadData.location}</span>
+            </div>
+            ` : ''}
+            
+            ${leadData.occupation ? `
+            <div class="field">
+              <span class="label">Occupation:</span>
+              <span class="value">${leadData.occupation}</span>
+            </div>
+            ` : ''}
+            
+            ${leadData.current_school ? `
+            <div class="field">
+              <span class="label">Current School:</span>
+              <span class="value">${leadData.current_school}</span>
+            </div>
+            ` : ''}
+            
+            <div class="field">
+              <span class="label">Source:</span>
+              <span class="value">${leadData.source}</span>
+            </div>
+            
+            <div class="field">
+              <span class="label">Stage:</span>
+              <span class="value">${leadData.stage}</span>
+            </div>
+            
+            <div class="field">
+              <span class="label">Counsellor:</span>
+              <span class="value">${leadData.counsellor}</span>
+            </div>
+            
+            <div class="field">
+              <span class="label">Offer:</span>
+              <span class="value">${leadData.offer}</span>
+            </div>
+            
+            ${leadData.notes ? `
+            <div class="field">
+              <span class="label">Notes:</span>
+              <span class="value">${leadData.notes}</span>
+            </div>
+            ` : ''}
+            
+            <div class="field">
+              <span class="label">Created At:</span>
+              <span class="value">${new Date(leadData.created_at).toLocaleString('en-IN', { 
+                timeZone: 'Asia/Kolkata',
+                dateStyle: 'medium',
+                timeStyle: 'short'
+              })}</span>
+            </div>
+          </div>
+          <div class="footer">
+            <p>This is an automated notification from Nova International School CRM</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const recipients = [
+      process.env.NOTIFICATION_EMAIL_1,
+      process.env.NOTIFICATION_EMAIL_2
+    ].filter(Boolean);
+
+    if (recipients.length === 0) {
+      return { success: false, error: 'No notification emails configured' };
+    }
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM,
+      to: recipients.join(', '),
+      subject: `New Lead: ${leadData.parents_name} (${leadData.kids_name})`,
+      html: emailHtml
+    };
+
+    await transporter.sendMail(mailOptions);
+    
+    return { success: true, recipients: recipients.length };
+
+  } catch (error) {
+    console.error('Email notification error:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 const triggerStage1API = async (leadData) => {
   try {
@@ -139,7 +305,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // CHECK AUTHENTICATION FIRST
   const authResult = authenticate(req);
   if (!authResult.success) {
     return res.status(401).json({
@@ -180,6 +345,7 @@ export default async function handler(req, res) {
 
     console.log('Lead created successfully:', newLead.id);
 
+    // Send WhatsApp message
     const stage1Result = await triggerStage1API({
       phone: newLead.phone,
       parentsName: newLead.parents_name,
@@ -187,6 +353,16 @@ export default async function handler(req, res) {
       grade: newLead.grade
     });
 
+    // Send email notifications
+    const emailResult = await sendEmailNotification(newLead);
+    
+    if (emailResult.success) {
+      console.log(`Email notifications sent to ${emailResult.recipients} recipients`);
+    } else {
+      console.log('Email notification failed (non-critical):', emailResult.error);
+    }
+
+    // Log to history
     try {
       const historyData = {
         record_id: newLead.id,
@@ -223,6 +399,12 @@ export default async function handler(req, res) {
           message: stage1Result.success ? 
             'Welcome message sent successfully' : 
             `Welcome message failed: ${stage1Result.error}`
+        },
+        emailNotification: {
+          success: emailResult.success,
+          message: emailResult.success ?
+            `Email sent to ${emailResult.recipients} recipients` :
+            `Email failed: ${emailResult.error}`
         }
       }
     });
