@@ -335,15 +335,19 @@ const InfoTab = ({
               <label className="lead-sidebar-form-label">Parent Name</label>
               {!isEditingMode ? (
                 <div className="lead-sidebar-field-value">
-                  {selectedLead?.parentsName || ''}
+                  {selectedLead?.parentsName === 'NA' || selectedLead?.parentsName === 'NULL' ? '' : (selectedLead?.parentsName || '')}
                 </div>
               ) : (
                 <input 
-                  type="text" 
-                  value={sidebarFormData.parentsName || selectedLead?.parentsName || ''} 
-                  onChange={(e) => onFieldChange('parentsName', e.target.value)}
-                  placeholder="Enter parent name"
-                  className="lead-sidebar-form-input"
+                type="text" 
+                value={
+                  sidebarFormData.parentsName !== undefined 
+                    ? sidebarFormData.parentsName 
+                    : (selectedLead?.parentsName === 'NA' || selectedLead?.parentsName === 'NULL' ? '' : (selectedLead?.parentsName || ''))
+                } 
+                onChange={(e) => onFieldChange('parentsName', e.target.value)}
+                placeholder="Enter parent name"
+                className="lead-sidebar-form-input"
                 />
               )}
             </div>
@@ -479,12 +483,16 @@ const InfoTab = ({
               <label className="lead-sidebar-form-label">Kid Name</label>
               {!isEditingMode ? (
                 <div className="lead-sidebar-field-value">
-                  {selectedLead?.kidsName || ''}
+                    {selectedLead?.kidsName === 'NA' || selectedLead?.kidsName === 'NULL' ? '' : (selectedLead?.kidsName || '')}
                 </div>
               ) : (
                 <input 
                   type="text" 
-                  value={sidebarFormData.kidsName || selectedLead?.kidsName || ''} 
+                  value={
+                    sidebarFormData.kidsName !== undefined 
+                      ? sidebarFormData.kidsName 
+                      : (selectedLead?.kidsName === 'NA' || selectedLead?.kidsName === 'NULL' ? '' : (selectedLead?.kidsName || ''))
+                  } 
                   onChange={(e) => onFieldChange('kidsName', e.target.value)}
                   placeholder="Enter kid name"
                   className="lead-sidebar-form-input"
