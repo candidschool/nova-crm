@@ -86,6 +86,9 @@ const FollowUpTable = ({ onLogout, user }) => {
   const [showDetailsPopup, setShowDetailsPopup] = useState(false);
   const [selectedFollowUpDetails, setSelectedFollowUpDetails] = useState(null);
 
+  // Follow-up Status Dropdown State
+  const [followUpStatusDropdownOpen, setFollowUpStatusDropdownOpen] = useState(null);
+
   // Sidebar editing states
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [sidebarFormData, setSidebarFormData] = useState({
@@ -245,7 +248,7 @@ const FollowUpTable = ({ onLogout, user }) => {
       grade: lead.grade || '',
       source: lead.source || settingsData.sources?.[0]?.name || 'Instagram',
       stage: lead.stage,
-      counsellor: lead.counsellor || '',
+      counsellor: lead.counsellor || '', 
       offer: lead.offer || 'Welcome Kit',
       email: lead.email || '',
       phone: lead.phone || '',
@@ -335,7 +338,46 @@ const FollowUpTable = ({ onLogout, user }) => {
     setShowDeleteDialog(false);
   };
 
-  // VIEW DETAILS FUNCTIONALITY - NEW
+  // Handle Follow-up Status Update with refresh
+  const handleFollowUpStatusChange = async (e, followUpId, newStatus) => {
+    e.stopPropagation();
+    
+    try {
+      console.log('Updating follow-up status:', followUpId, newStatus);
+      
+      // Close dropdown immediately
+      setFollowUpStatusDropdownOpen(null);
+      
+      // Update database
+      const { error } = await supabase
+        .from(TABLE_NAMES.FOLLOW_UPS)
+        .update({ status: newStatus })
+        .eq('id', followUpId);
+
+      if (error) {
+        console.error('Database update failed:', error);
+        alert('Failed to update status. Please try again.');
+        throw error;
+      }
+
+      console.log('✅ Follow-up status updated successfully');
+      
+      // Refresh the entire data to recalculate which follow-up to show
+      await fetchFollowUpLeads();
+      
+    } catch (error) {
+      console.error('Error updating follow-up status:', error);
+      alert('Error updating follow-up status: ' + error.message);
+    }
+  };
+
+  // Toggle Follow-up Status Dropdown
+  const handleFollowUpStatusDropdownToggle = (e, followUpId) => {
+    e.stopPropagation();
+    setFollowUpStatusDropdownOpen(followUpStatusDropdownOpen === followUpId ? null : followUpId);
+  };
+
+  // VIEW DETAILS FUNCTIONALITY
   const handleViewDetails = (e, lead) => {
     e.stopPropagation(); // Prevent opening sidebar
     setSelectedFollowUpDetails({
@@ -401,97 +443,174 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // ← UPDATED: MAIN FETCH FUNCTION WITH ROLE-BASED FILTERING
+  // ✅ MAIN FETCH FUNCTION - FIXED
   const fetchFollowUpLeads = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('=== FOLLOW-UP LEADS FETCH WITH ROLE-BASED FILTERING ===');
-      console.log('Fetching follow-ups for date range:', dateRange);
-      console.log('User role:', user.role);
-      console.log('User name:', user.full_name);
+      console.log('=== FOLLOW-UP LEADS FETCH START ===');
+      console.log('User:', user?.full_name, 'Role:', user?.role);
+      console.log('Date range:', dateRange);
       
-      // Fetch follow-ups within the date range
+      // Step 1: Fetch ALL follow-ups
       const { data: followUpsData, error: followUpsError } = await supabase
         .from(TABLE_NAMES.FOLLOW_UPS)
-        .select('lead_id, follow_up_date, details, created_at')
-        .gte('follow_up_date', dateRange.startDate)
-        .lte('follow_up_date', dateRange.endDate)
+        .select('id, lead_id, follow_up_date, details, status, created_at')
         .order('follow_up_date', { ascending: true });
 
-      if (followUpsError) throw followUpsError;
+      if (followUpsError) {
+        console.error('Error fetching follow-ups:', followUpsError);
+        throw followUpsError;
+      }
 
-      console.log('Follow-ups found:', followUpsData);
+      console.log('✅ Total follow-ups in database:', followUpsData?.length || 0);
 
       if (!followUpsData || followUpsData.length === 0) {
+        console.log('❌ No follow-ups found in database');
         setFollowUpLeadsData([]);
         setLeadsData([]);
+        setLoading(false);
         return;
       }
 
-      // Get unique lead IDs
-      const leadIds = [...new Set(followUpsData.map(f => f.lead_id))];
-      console.log('Unique lead IDs:', leadIds);
+      // Step 2: Filter follow-ups by date range
+      const filteredFollowUps = followUpsData.filter(f => {
+        if (!f.follow_up_date) return false;
+        
+        const followUpDate = f.follow_up_date.split('T')[0];
+        const startDate = dateRange.startDate;
+        const endDate = dateRange.endDate;
+        
+        return followUpDate >= startDate && followUpDate <= endDate;
+      });
 
-      // ← NEW: Build the leads query with role-based filtering
-      let leadsQuery = supabase
-        .from(TABLE_NAMES.LEADS)
-        .select('*')
-        .in('id', leadIds);
+      console.log('✅ Follow-ups in date range:', filteredFollowUps.length);
 
-      // ← NEW: Apply role-based filtering
-      if (user.role !== 'admin') {
-        console.log('Applying role-based filter for regular user');
-        leadsQuery = leadsQuery.eq('counsellor', user.full_name);
-      } else {
-        console.log('Admin user - showing all leads');
+      if (filteredFollowUps.length === 0) {
+        console.log('❌ No follow-ups in selected date range');
+        setFollowUpLeadsData([]);
+        setLeadsData([]);
+        setLoading(false);
+        return;
       }
 
-      // Execute the query
-      const { data: leadsResponse, error: leadsError } = await leadsQuery.order('id', { ascending: false });
+      // Step 3: Get unique lead IDs from filtered follow-ups
+      const leadIds = [...new Set(filteredFollowUps.map(f => f.lead_id))];
+      console.log('✅ Unique lead IDs from follow-ups:', leadIds);
 
-      if (leadsError) throw leadsError;
+      // Step 4: Fetch ALL leads first (no role filtering yet)
+      const { data: allLeadsResponse, error: allLeadsError } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .select('*')
+        .in('id', leadIds)
+        .order('id', { ascending: false });
 
-      console.log('Role-filtered leads found:', leadsResponse.length);
+      if (allLeadsError) {
+        console.error('Error fetching leads:', allLeadsError);
+        throw allLeadsError;
+      }
 
-      // Also fetch activity data
+      console.log('✅ Total leads fetched:', allLeadsResponse?.length || 0);
+
+      // Step 5: Apply role-based filtering in memory
+      let leadsResponse = allLeadsResponse;
+      
+      if (user && user.role !== 'admin') {
+        console.log('👤 Regular user - filtering by counsellor:', user.full_name);
+        leadsResponse = allLeadsResponse.filter(lead => lead.counsellor === user.full_name);
+        console.log('✅ Leads after counsellor filter:', leadsResponse.length);
+      } else {
+        console.log('👑 Admin user - showing all leads');
+      }
+
+      if (!leadsResponse || leadsResponse.length === 0) {
+        console.log('❌ No leads found after role filtering');
+        setFollowUpLeadsData([]);
+        setLeadsData([]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 6: Fetch activity data
       const { data: activityResponse, error: activityError } = await supabase
         .from(TABLE_NAMES.LAST_ACTIVITY_BY_LEAD)
         .select('*');
 
-      if (activityError) throw activityError;
+      if (activityError) {
+        console.error('Error fetching activity:', activityError);
+      }
 
-      // Convert leads data with custom fields
-      console.log('Converting leads data with custom fields...');
+      // Step 7: Convert leads with follow-up logic
+      const today = new Date().toISOString().split('T')[0];
+      console.log('📅 Today\'s date:', today);
+
       const convertedData = await Promise.all(
         leadsResponse.map(async (leadRecord) => {
           const convertedLead = await convertDatabaseToUIWithCustomFields(leadRecord);
           
-          // Add follow-up information to each lead
-          const leadFollowUps = followUpsData.filter(f => f.lead_id === leadRecord.id);
-          convertedLead.followUps = leadFollowUps;
-          convertedLead.nextFollowUpDate = leadFollowUps[0]?.follow_up_date; // First one due to ordering
-          convertedLead.followUpDetails = leadFollowUps[0]?.details;
+          // Get ALL follow-ups for this lead (for sidebar)
+          const allLeadFollowUps = followUpsData.filter(f => f.lead_id === leadRecord.id);
+          
+          // Get follow-ups in date range for this lead
+          const leadFollowUpsInRange = filteredFollowUps.filter(f => f.lead_id === leadRecord.id);
+          
+          // Sort by date
+          leadFollowUpsInRange.sort((a, b) => {
+            const dateA = a.follow_up_date.split('T')[0];
+            const dateB = b.follow_up_date.split('T')[0];
+            return dateA.localeCompare(dateB);
+          });
+          
+          // ✅ FIXED LOGIC: Prioritize upcoming follow-ups, but show past ones if no upcoming exist
+          let nextFollowUp;
+          
+          // First, try to find an upcoming follow-up (not done, today or future)
+          const upcomingFollowUp = leadFollowUpsInRange.find(f => 
+            f.status !== 'Done' && f.follow_up_date.split('T')[0] >= today
+          );
+          
+          if (upcomingFollowUp) {
+            nextFollowUp = upcomingFollowUp;
+          } else {
+            // If no upcoming follow-up, check for any "Not Done" follow-ups in range
+            const notDoneFollowUp = leadFollowUpsInRange.find(f => f.status !== 'Done');
+            
+            if (notDoneFollowUp) {
+              nextFollowUp = notDoneFollowUp;
+            } else {
+              // If all are done, show the earliest one in range
+              nextFollowUp = leadFollowUpsInRange[0];
+            }
+          }
+          
+          convertedLead.followUps = allLeadFollowUps;
+          convertedLead.nextFollowUpDate = nextFollowUp?.follow_up_date?.split('T')[0];
+          convertedLead.followUpDetails = nextFollowUp?.details;
+          convertedLead.followUpStatus = nextFollowUp?.status || 'Not Done';
+          convertedLead.nextFollowUpId = nextFollowUp?.id;
           
           return convertedLead;
         })
       );
       
+      console.log('✅ Converted leads:', convertedData.length);
+      console.log('=== FOLLOW-UP LEADS FETCH COMPLETE ===');
+      
       setFollowUpLeadsData(convertedData);
-      setLeadsData(convertedData); // For compatibility with existing components
+      setLeadsData(convertedData);
       
-      // Process activity data
-      const activityMap = {};
-      activityResponse.forEach(item => {
-        activityMap[item.record_id] = item.last_activity;
-      });
-      setLastActivityData(activityMap);
-      
-      console.log('Role-filtered follow-up leads loaded:', convertedData);
+      // Activity data
+      if (activityResponse) {
+        const activityMap = {};
+        activityResponse.forEach(item => {
+          activityMap[item.record_id] = item.last_activity;
+        });
+        setLastActivityData(activityMap);
+      }
       
     } catch (error) {
-      console.error('Error fetching follow-up leads:', error);
+      console.error('❌ Error fetching follow-up leads:', error);
       setError(error.message);
     } finally {
       setLoading(false);
@@ -500,11 +619,8 @@ const FollowUpTable = ({ onLogout, user }) => {
 
   // Fetch leads on component mount and when date range changes
   useEffect(() => {
-    console.time('Follow-up page load time');
-    fetchFollowUpLeads().then(() => {
-      console.timeEnd('Follow-up page load time');
-    });
-  }, [dateRange]);
+    fetchFollowUpLeads();
+  }, [dateRange.startDate, dateRange.endDate]);
 
   // Handle date range change
   const handleDateRangeChange = (field, value) => {
@@ -544,12 +660,9 @@ const FollowUpTable = ({ onLogout, user }) => {
 
   // Sidebar functions
   const openSidebar = (lead) => {
-    console.log('Opening sidebar for lead:', lead);
     setSelectedLead(lead);
-    
     const formData = setupSidebarFormDataWithCustomFields(lead);
     setSidebarFormData(formData);
-    
     setShowSidebar(true);
     setIsEditingMode(false);
   };
@@ -795,11 +908,14 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // Close stage dropdown when clicking elsewhere
+  // Close dropdowns when clicking elsewhere
   useEffect(() => {
     const handleClickOutside = () => {
       if (stageDropdownOpen) {
         setStageDropdownOpen(null);
+      }
+      if (followUpStatusDropdownOpen) {
+        setFollowUpStatusDropdownOpen(null);
       }
     };
 
@@ -807,7 +923,7 @@ const FollowUpTable = ({ onLogout, user }) => {
     return () => {
       document.removeEventListener('click', handleClickOutside);
     };
-  }, [stageDropdownOpen]);
+  }, [stageDropdownOpen, followUpStatusDropdownOpen]);
 
   // Search functionality
   const handleSearchChange = (e) => {
@@ -1023,7 +1139,7 @@ const FollowUpTable = ({ onLogout, user }) => {
                 getStageKeyFromName={getStageKeyFromName}
                 getStageDisplayName={getStageDisplayName}
                 FilterButton={FilterButton}
-                hideAddButtons={true} // Hide add/import buttons
+                hideAddButtons={true}
               />
             </div>
           </div>
@@ -1057,6 +1173,7 @@ const FollowUpTable = ({ onLogout, user }) => {
                 <th className="desktop-only">Status</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
                 <th>Follow-up</th>
+                <th>F/U Status</th>
                 <th>View Details</th>
               </tr>
             </thead>
@@ -1145,6 +1262,43 @@ const FollowUpTable = ({ onLogout, user }) => {
                         </div>
                       </div>
                     </td>
+                    
+                    {/* Follow-up Status Dropdown Column */}
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div className="followup-status-dropdown-container">
+                        <div 
+                          className={`followup-status-badge ${lead.followUpStatus === 'Done' ? 'done' : 'not-done'}`}
+                          onClick={(e) => handleFollowUpStatusDropdownToggle(e, lead.nextFollowUpId)}
+                        >
+                          <span>{lead.followUpStatus || 'Not Done'}</span>
+                          <ChevronDown 
+                            size={12} 
+                            className={`chevron ${followUpStatusDropdownOpen === lead.nextFollowUpId ? 'open' : ''}`}
+                          />
+                        </div>
+                        
+                        {/* Follow-up Status Dropdown Menu */}
+                        {followUpStatusDropdownOpen === lead.nextFollowUpId && (
+                          <div className="followup-status-dropdown-menu">
+                            <div
+                              className="followup-status-dropdown-item"
+                              onClick={(e) => handleFollowUpStatusChange(e, lead.nextFollowUpId, 'Done')}
+                            >
+                              <CheckCircle size={14} className="status-icon done" />
+                              <span>Done</span>
+                            </div>
+                            <div
+                              className="followup-status-dropdown-item"
+                              onClick={(e) => handleFollowUpStatusChange(e, lead.nextFollowUpId, 'Not Done')}
+                            >
+                              <Clock size={14} className="status-icon not-done" />
+                              <span>Not Done</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    
                     <td className="counsellor-middle">
                       <button
                         className="view-details-btn"
@@ -1158,7 +1312,7 @@ const FollowUpTable = ({ onLogout, user }) => {
                 ))
               ) : !loading ? (
                 <tr>
-                  <td colSpan="10" className="no-data">
+                  <td colSpan="11" className="no-data">
                     {searchTerm 
                       ? 'No follow-ups found for your search.' 
                       : `No follow-ups scheduled for ${dateRange.startDate === dateRange.endDate ? 
@@ -1239,16 +1393,23 @@ const FollowUpTable = ({ onLogout, user }) => {
                   {selectedFollowUpDetails.followUps.map((followUp, index) => (
                     <div 
                       key={index}
-                      className={`followup-item ${index === 0 ? 'next' : ''}`}
+                      className={`followup-item ${index === 0 ? 'next' : ''} ${followUp.status === 'Done' ? 'followup-done' : ''}`}
                     >
                       <div className="followup-item-header">
                         <div className="followup-date">
                           <Calendar size={14} />
                           {formatFullDate(followUp.follow_up_date)}
                         </div>
-                        {index === 0 && (
-                          <span className="followup-next-badge">Next</span>
-                        )}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {index === 0 && (
+                            <span className="followup-next-badge">Next</span>
+                          )}
+                          {followUp.status === 'Done' && (
+                            <span className="followup-done-badge">
+                              <CheckCircle size={12} /> Done
+                            </span>
+                          )}
+                        </div>
                       </div>
                       
                       <div className="followup-details">
