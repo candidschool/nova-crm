@@ -4987,3 +4987,184 @@
   font-size: 14px;
   margin: 16px 20px 16px 230px;
 }
+
+/*Follow up done additions*/
+
+.followup-status-dropdown-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Follow-up Status Badge */
+.followup-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  min-width: 90px;
+  justify-content: center;
+}
+
+/* Done Status */
+.followup-status-badge.done {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #10b981;
+}
+
+.followup-status-badge.done:hover {
+  background-color: #a7f3d0;
+  border-color: #059669;
+}
+
+/* Not Done Status */
+.followup-status-badge.not-done {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.followup-status-badge.not-done:hover {
+  background-color: #fde68a;
+  border-color: #d97706;
+}
+
+/* Chevron Icon */
+.followup-status-badge .chevron {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.followup-status-badge .chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Follow-up Status Dropdown Menu */
+.followup-status-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-top: 4px;
+  min-width: 140px;
+  overflow: hidden;
+}
+
+/* Dropdown Item */
+.followup-status-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: white;
+  color: #333;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.followup-status-dropdown-item:hover {
+  background-color: #f8f9fa;
+}
+
+.followup-status-dropdown-item:not(:last-child) {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+/* Status Icons in Dropdown */
+.followup-status-dropdown-item .status-icon {
+  flex-shrink: 0;
+}
+
+.followup-status-dropdown-item .status-icon.done {
+  color: #10b981;
+}
+
+.followup-status-dropdown-item .status-icon.not-done {
+  color: #f59e0b;
+}
+
+.lead-sidebar-follow-up-item.followup-done {
+  background-color: #f0fdf4;
+  border-left: 3px solid #10b981;
+  padding-left: 21px; /* Adjust for border */
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+/* UPDATE your existing .lead-sidebar-follow-up-dot.today 
+   ADD this new .done variant AFTER .today */
+.lead-sidebar-follow-up-dot.done {
+  background-color: #10b981;
+  border-color: #059669;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+  animation: none; /* Remove pulse for done items */
+}
+
+/* UPDATE your existing .lead-sidebar-follow-up-action.today
+   ADD this new .done variant AFTER .today */
+.lead-sidebar-follow-up-action.done {
+  color: #065f46;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* NEW: Sidebar Done Badge */
+.sidebar-followup-done-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background-color: #d1fae5;
+  color: #065f46;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #10b981;
+}
+
+/* Follow-up Item Done in Popup */
+.followup-item.followup-done {
+  background-color: #f0fdf4;
+  border-left: 3px solid #10b981;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+/* Follow-up Done Badge in Popup */
+.followup-done-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background-color: #d1fae5;
+  color: #065f46;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid #10b981;
+}
+
+.followup-status-badge:active {
+  transform: scale(0.98);
+}
+
+.followup-status-badge:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
