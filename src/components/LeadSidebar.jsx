@@ -18,7 +18,8 @@ import {
   Edit,
   ChevronDown,
   Calendar,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react';
 import { useLeadState } from './LeadStateProvider';
 import InfoTab from './InfoTab';
@@ -264,21 +265,21 @@ const LeadSidebar = ({
 
   // Fetch follow-ups for the selected lead
   const fetchFollowUps = async () => {
-    if (!selectedLead?.id) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.FOLLOW_UPS)
-        .select('*')
-        .eq('lead_id', selectedLead.id)
-        .order('follow_up_date', { ascending: false });
+  if (!selectedLead?.id) return;
+  
+  try {
+    const { data, error } = await supabase
+      .from(TABLE_NAMES.FOLLOW_UPS)
+      .select('id, lead_id, follow_up_date, details, status, created_at')  // ✅ Make sure status is here
+      .eq('lead_id', selectedLead.id)
+      .order('follow_up_date', { ascending: false });
 
-      if (error) throw error;
-      setFollowUpData(data || []);
-    } catch (error) {
-      console.error('Error fetching follow-ups:', error);
-    }
-  };
+    if (error) throw error;
+    setFollowUpData(data || []);
+  } catch (error) {
+    console.error('Error fetching follow-ups:', error);
+  }
+};
 
   // Handle follow-up submission
   const handleFollowUpSubmit = async () => {
@@ -1018,96 +1019,105 @@ const LeadSidebar = ({
             />
           )}
 
-          {/* Follow Up Tab Content */}
-          {activeTab === 'followup' && (
-            <div className="lead-sidebar-tab-content">
-              {/* Follow Up Input Form */}
-              <div className="lead-sidebar-follow-up-input">
-                <h6 className="lead-sidebar-follow-up-input-title">
-                  Schedule follow-up action for this lead:
-                </h6>
-                <div className="lead-sidebar-follow-up-input-form">
-                  <div className="lead-sidebar-follow-up-input-group">
-                    <label className="lead-sidebar-follow-up-input-label">
-                      Date
-                    </label>
-                    <input
-                      type="date"
-                      value={followUpDate}
-                      min={today}
-                      onChange={(e) => setFollowUpDate(e.target.value)}
-                      className="lead-sidebar-follow-up-input-field"
-                    />
+         {/* Follow Up Tab Content */}
+            {activeTab === 'followup' && (
+              <div className="lead-sidebar-tab-content">
+                {/* Follow Up Input Form */}
+                <div className="lead-sidebar-follow-up-input">
+                  <h6 className="lead-sidebar-follow-up-input-title">
+                    Schedule follow-up action for this lead:
+                  </h6>
+                  <div className="lead-sidebar-follow-up-input-form">
+                    <div className="lead-sidebar-follow-up-input-group">
+                      <label className="lead-sidebar-follow-up-input-label">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        value={followUpDate}
+                        min={today}
+                        onChange={(e) => setFollowUpDate(e.target.value)}
+                        className="lead-sidebar-follow-up-input-field"
+                      />
+                    </div>
+                    <div className="lead-sidebar-history-input-group wide">
+                      <label className="lead-sidebar-follow-up-input-label">
+                        Details
+                      </label>
+                      <input
+                        type="text"
+                        value={followUpDetails}
+                        onChange={(e) => setFollowUpDetails(e.target.value)}
+                        placeholder="e.g., Call to follow up on meeting"
+                        className="lead-sidebar-follow-up-input-field"
+                      />
+                    </div>
+                    <button
+                      onClick={handleFollowUpSubmit}
+                      className="lead-sidebar-follow-up-update-btn"
+                    >
+                      Add Follow up
+                    </button>
                   </div>
-                  <div className="lead-sidebar-history-input-group wide">
-                    <label className="lead-sidebar-follow-up-input-label">
-                      Details
-                    </label>
-                    <input
-                      type="text"
-                      value={followUpDetails}
-                      onChange={(e) => setFollowUpDetails(e.target.value)}
-                      placeholder="e.g., Call to follow up on meeting"
-                      className="lead-sidebar-follow-up-input-field"
-                    />
-                  </div>
-                  <button
-                    onClick={handleFollowUpSubmit}
-                    className="lead-sidebar-follow-up-update-btn"
-                  >
-                    Add Follow up
-                  </button>
                 </div>
-              </div>
 
-              {/* Follow Up Timeline */}
-              <div className="lead-sidebar-follow-up-timeline">
-                {followUpData.length > 0 ? (
-                  followUpData.map((followUp, index) => {
-                    const isFollowUpToday = isToday(followUp.follow_up_date);
-                    const isFollowUpFuture = isFuture(followUp.follow_up_date);
-                    
-                    return (
-                      <div key={followUp.id} className="lead-sidebar-follow-up-item">
-                        {index < followUpData.length - 1 && (
-                          <div className="lead-sidebar-follow-up-line"></div>
-                        )}
-                        
-                        <div className={`lead-sidebar-follow-up-dot ${
-                          isFollowUpToday ? 'today' : isFollowUpFuture ? 'future' : 'past'
-                        }`}></div>
-                        
-                        <div className="lead-sidebar-follow-up-content">
-                          <div className={`lead-sidebar-follow-up-action ${
-                            isFollowUpToday ? 'today' : isFollowUpFuture ? 'future' : 'past'
-                          }`}>
-                            Follow Up - {formatDateForDisplay(followUp.follow_up_date)}
-                          </div>
-                          <div className="lead-sidebar-follow-up-description">
-                            {followUp.details}
-                          </div>
-                          <div className="lead-sidebar-follow-up-time">
-                            Added {new Date(followUp.created_at).toLocaleDateString('en-GB', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true
-                            })}
+                {/* Follow Up Timeline */}
+                <div className="lead-sidebar-follow-up-timeline">
+                  {followUpData.length > 0 ? (
+                    followUpData.map((followUp, index) => {
+                      const isFollowUpToday = isToday(followUp.follow_up_date);
+                      const isFollowUpFuture = isFuture(followUp.follow_up_date);
+                      const isDone = followUp.status === 'Done'; // ✅ NEW: Check if status is Done
+                      
+                      return (
+                        <div 
+                          key={followUp.id} 
+                          className={`lead-sidebar-follow-up-item ${isDone ? 'followup-done' : ''}`}
+                        >
+                          {index < followUpData.length - 1 && (
+                            <div className="lead-sidebar-follow-up-line"></div>
+                          )}
+                          
+                          <div className={`lead-sidebar-follow-up-dot ${
+                            isDone ? 'done' : isFollowUpToday ? 'today' : isFollowUpFuture ? 'future' : 'past'
+                          }`}></div>
+                          
+                          <div className="lead-sidebar-follow-up-content">
+                            <div className={`lead-sidebar-follow-up-action ${
+                              isDone ? 'done' : isFollowUpToday ? 'today' : isFollowUpFuture ? 'future' : 'past'
+                            }`}>
+                              <span>Follow Up - {formatDateForDisplay(followUp.follow_up_date)}</span>
+                              {isDone && (
+                                <span className="sidebar-followup-done-badge">
+                                  <CheckCircle size={12} /> Done
+                                </span>
+                              )}
+                            </div>
+                            <div className="lead-sidebar-follow-up-description">
+                              {followUp.details}
+                            </div>
+                            <div className="lead-sidebar-follow-up-time">
+                              Added {new Date(followUp.created_at).toLocaleDateString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              })}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="lead-sidebar-follow-up-empty">
-                    No follow-ups scheduled
-                  </div>
-                )}
+                      );
+                    })
+                  ) : (
+                    <div className="lead-sidebar-follow-up-empty">
+                      No follow-ups scheduled
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* History Tab Content */}
           {activeTab === 'history' && (
