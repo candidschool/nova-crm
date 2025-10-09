@@ -882,7 +882,7 @@ const InfoTab = ({
                   onChange={(e) => onFieldChange('counsellor', e.target.value)}
                   className="lead-sidebar-form-select"
                 >
-                  <option value="" disabled>Select Counsellor</option>
+                  <option value="">Select your {getFieldLabel('counsellor')}</option>
                   {settingsData?.counsellors?.map(counsellor => (
                     <option key={counsellor.id} value={counsellor.name}>
                       {counsellor.name}
