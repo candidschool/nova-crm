@@ -27,7 +27,7 @@ const OverviewDashboard = () => {
     isActive: false
   });
 
-  // ← NEW: Generate dynamic source colors based on settings
+  // Generate dynamic source colors based on settings
   const generateSourceColors = useMemo(() => {
     const colors = [
       '#2A89DD', '#F6BD51', '#EE6E55', '#647BCA', '#30B2B6', 
@@ -113,7 +113,6 @@ const OverviewDashboard = () => {
       notes: dbRecord.notes,
       email: dbRecord.email || '',
       occupation: dbRecord.occupation || '',
-      // ← UPDATED: Use first available source from settings as default
       source: dbRecord.source || (settingsData?.sources?.[0]?.name || 'Unknown'),
       currentSchool: dbRecord.current_school || '',
       meetingDate: meetingDate,
@@ -145,21 +144,46 @@ const OverviewDashboard = () => {
     };
   };
 
-  // Fetch leads function
+  // ✅ FIXED: Fetch leads function with batching to handle 4000+ leads
   const fetchLeads = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .select('*')
-        .order('id', { ascending: true });
-
-      if (error) throw error;
-
+      
+      // Fetch all leads in batches (same as LeadsTable.jsx)
+      let allLeads = [];
+      let from = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+      
       console.log('=== OVERVIEW DASHBOARD DATA FETCH ===');
-      console.log('Raw data from Supabase:', data);
-      const convertedData = data.map(convertDatabaseToUI);
-      console.log('Converted data with stage_key:', convertedData);
+      console.time('Total Fetch Time');
+      
+      while (hasMore) {
+        console.log(`Fetching batch starting from ${from}...`);
+        
+        const { data, error } = await supabase
+          .from(TABLE_NAMES.LEADS)
+          .select('*')
+          .order('id', { ascending: true })
+          .range(from, from + batchSize - 1);
+        
+        if (error) throw error;
+        
+        console.log(`Fetched ${data.length} leads in this batch`);
+        allLeads = [...allLeads, ...data];
+        
+        if (data.length < batchSize) {
+          hasMore = false;
+        } else {
+          from += batchSize;
+        }
+      }
+
+      console.timeEnd('Total Fetch Time');
+      console.log('Total leads fetched from database:', allLeads.length);
+      
+      const convertedData = allLeads.map(convertDatabaseToUI);
+      console.log('Converted data with stage_key:', convertedData.length);
       setLeadsData(convertedData);
     } catch (error) {
       console.error('Error fetching leads:', error);
@@ -215,7 +239,7 @@ const OverviewDashboard = () => {
     return counts;
   }, [getFilteredLeadsByDate]);
 
-  // ← UPDATED: Calculate source performance data using dynamic sources from settings
+  // Calculate source performance data using dynamic sources from settings
   const sourceData = useMemo(() => {
     const filteredLeads = getFilteredLeadsByDate;
     
@@ -243,7 +267,7 @@ const OverviewDashboard = () => {
       console.log(`Source "${name}": ${value} leads, color: ${color}`);
       
       return {
-        name: name, // ← UPDATED: Use the actual source name from settings
+        name: name,
         originalName: name,
         value,
         percentage: filteredLeads.length > 0 ? ((value / filteredLeads.length) * 100).toFixed(1) : 0,
@@ -255,7 +279,7 @@ const OverviewDashboard = () => {
     return data;
   }, [getFilteredLeadsByDate, generateSourceColors, settingsData?.sources]);
 
-  // Calculate stage data with stage_key support
+  // Calculate stage data with stage_key support and IMPROVED width calculation
   const stageData = useMemo(() => {
     const filteredLeads = getFilteredLeadsByDate;
     const totalLeads = filteredLeads.length;
@@ -266,37 +290,69 @@ const OverviewDashboard = () => {
     
     const dynamicStages = settingsData?.stages?.filter(stage => stage.is_active) || [];
     
-    return dynamicStages.map(stageConfig => {
+    // First pass: collect all counts
+    const stagesWithCounts = dynamicStages.map(stageConfig => {
       const stageName = stageConfig.name;
       const stageKey = stageConfig.stage_key || stageName;
       
-      console.log(`Processing stage: ${stageName} (key: ${stageKey})`);
-      
       const count = filteredLeads.filter(lead => {
         const leadStageKey = getStageKeyForLead(lead.stage);
-        const matches = leadStageKey === stageKey || lead.stage === stageName;
-        
-        if (matches) {
-          console.log(`  Lead ${lead.id} matches stage ${stageName}`);
-        }
-        
-        return matches;
+        return leadStageKey === stageKey || lead.stage === stageName;
       }).length;
       
-      console.log(`  Final count for ${stageName}: ${count}`);
+      return {
+        stageName,
+        stageKey,
+        count,
+        color: getStageColorFromSettings(stageKey)
+      };
+    });
+
+    // Find max and min counts for better scaling
+    const counts = stagesWithCounts.map(s => s.count).filter(c => c > 0);
+    const maxCount = Math.max(...counts, 1);
+    const minCount = Math.min(...counts.filter(c => c > 0), 1);
+    
+    console.log(`Max count: ${maxCount}, Min count: ${minCount}`);
+
+    // Second pass: calculate widths with improved scaling
+    return stagesWithCounts.map(({ stageName, stageKey, count, color }) => {
+      console.log(`Processing stage: ${stageName} (key: ${stageKey}), count: ${count}`);
       
       const minWidth = 120;
       const maxWidth = 550;
+      
+      let widthPx;
+      
+      if (count === 0) {
+        widthPx = minWidth;
+      } else if (maxCount === minCount) {
+        // All stages have same count
+        widthPx = maxWidth / 2;
+      } else {
+        // Use logarithmic scale for better visual differentiation when there's huge variance
+        const logCount = Math.log10(count + 1);
+        const logMax = Math.log10(maxCount + 1);
+        const logMin = Math.log10(minCount + 1);
+        
+        // Normalize to 0-1 range using log scale
+        const normalizedValue = (logCount - logMin) / (logMax - logMin);
+        
+        // Apply to width range
+        widthPx = minWidth + (normalizedValue * (maxWidth - minWidth));
+        
+        console.log(`  Log scale: ${logCount.toFixed(2)} / ${logMax.toFixed(2)} = ${normalizedValue.toFixed(2)} → ${widthPx.toFixed(2)}px`);
+      }
+
       const percentage = totalLeads > 0 ? (count / totalLeads) * 100 : 0;
-      const widthPx = totalLeads > 0 ? 
-        minWidth + ((percentage / 100) * (maxWidth - minWidth)) : minWidth;
 
       return {
         stage: stageName,
         stageKey: stageKey,
         count,
         widthPx,
-        color: getStageColorFromSettings(stageKey)
+        percentage: percentage.toFixed(1),
+        color
       };
     });
   }, [getFilteredLeadsByDate, settingsData?.stages, getStageColorFromSettings, getStageKeyForLead]);
@@ -507,9 +563,8 @@ const OverviewDashboard = () => {
           ) : (
             <div className="dashboard-chart-empty">
               <div>No source data available</div>
-              {/* ← UPDATED: Show available sources from settings */}
-              <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
-                {settingsData?.sources?.length > 0 && (
+              {settingsData?.sources?.length > 0 && (
+                <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
                   <div>
                     <strong>Available sources from settings:</strong>
                     <ul style={{ marginTop: '5px' }}>
@@ -518,8 +573,8 @@ const OverviewDashboard = () => {
                       ))}
                     </ul>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
