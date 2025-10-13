@@ -13,6 +13,7 @@ import SettingsPage from './components/SettingsPage';
 import SettingsDataProvider from './contexts/SettingsDataProvider';
 import FollowUpTable from './components/FollowUpTable';
 import { authService } from './services/authService';
+import CalendarPage from './components/CalendarPage';
 
 // Wrapper component to handle navigation within Router context
 function AppContent() {
@@ -174,6 +175,12 @@ function AppContent() {
                 path="/followup" 
                 element={<FollowUpTable onLogout={handleLogout} user={user} />} 
               />
+
+              <Route 
+                path="/calendarpage" 
+                element={<CalendarPage onLogout={handleLogout} user={user} />} 
+              />
+              
               
               
               
