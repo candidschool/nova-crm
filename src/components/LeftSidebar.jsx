@@ -160,6 +160,15 @@ const LeftSidebar = ({
               <TrendingUp size={18} className="nav-icon" />
               Follow Up
             </a>
+
+            <a 
+              href="/calendarpage" 
+              className={`nova-nav-item ${activeNavItem === "calendarpage" ? "active" : ""}`}
+              onClick={closeMobileMenu}
+            >
+              <TrendingUp size={18} className="nav-icon" />
+              Calendar Page
+            </a>
           
           
           
