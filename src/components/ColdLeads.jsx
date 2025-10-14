@@ -1077,7 +1077,7 @@ const ColdLeads = ({ onLogout, user }) => {
                 <th>Stage</th>
                 <th className="desktop-only">Status</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
-                <th>Notes</th>
+                <th>Comment</th>
                 <th>Reactivate</th>
               </tr>
             </thead>
