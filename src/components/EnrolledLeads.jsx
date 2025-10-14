@@ -1042,7 +1042,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
                 <th>Stage</th>
                 <th className="desktop-only">Status</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
-                <th>Notes</th>
+                <th>Comment</th>
               </tr>
             </thead>
             <tbody>
