@@ -19,7 +19,8 @@ import {
   Loader2,
   RefreshCw,
   Trash2,
-  Plus
+  Plus,
+  X
 } from 'lucide-react';
 
 const ColdLeads = ({ onLogout, user }) => {
@@ -51,6 +52,14 @@ const ColdLeads = ({ onLogout, user }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [stageDropdownOpen, setStageDropdownOpen] = useState(null);
+  const [stageChangeModal, setStageChangeModal] = useState({
+    isOpen: false,
+    leadId: null,
+    currentStage: null,
+    selectedStage: null,
+    comment: '',
+    error: ''
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedLeads, setSelectedLeads] = useState([]);
@@ -83,10 +92,12 @@ const ColdLeads = ({ onLogout, user }) => {
   });
 
   const [lastActivityData, setLastActivityData] = useState({});
+  const [latestComments, setLatestComments] = useState({});
   const [showFilter, setShowFilter] = useState(false);
   const [counsellorFilters, setCounsellorFilters] = useState([]);
   const [stageFilters, setStageFilters] = useState([]);
   const [statusFilters, setStatusFilters] = useState([]);
+  const [alertFilter, setAlertFilter] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const leadsPerPage = 1000;
 
@@ -290,7 +301,7 @@ const ColdLeads = ({ onLogout, user }) => {
     setSelectedLeads([]);
     setSelectAll(false);
     setCurrentPage(1);
-  }, [searchTerm, counsellorFilters, stageFilters, statusFilters]);
+  }, [searchTerm, counsellorFilters, stageFilters, statusFilters, alertFilter]);
 
   const getStageCount = (stageName) => {
     const stageKey = getStageKeyFromName(stageName);
@@ -311,6 +322,37 @@ const ColdLeads = ({ onLogout, user }) => {
     const words = fullName.trim().split(' ');
     const firstTwoWords = words.slice(0, 2);
     return firstTwoWords.map(word => word.charAt(0).toUpperCase()).join('');
+  };
+
+  const fetchLatestComments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .select('record_id, description')
+        .eq('main_action', 'Stage Updated')
+        .order('action_timestamp', { ascending: false });
+
+      if (error) throw error;
+
+      const comments = {};
+      const seen = new Set();
+
+      data?.forEach(entry => {
+        const leadId = entry.record_id;
+        if (!seen.has(leadId)) {
+          const description = entry.description;
+          const commentMatch = description.match(/Comment:\s*"([^"]*)"/);
+          if (commentMatch) {
+            comments[leadId] = commentMatch[1];
+            seen.add(leadId);
+          }
+        }
+      });
+
+      setLatestComments(comments);
+    } catch (error) {
+      console.error('Error fetching latest comments:', error);
+    }
   };
 
   const fetchLastActivityData = async () => {
@@ -395,6 +437,8 @@ const ColdLeads = ({ onLogout, user }) => {
       console.timeEnd('Total Fetch Time');
       setLoading(false);
       
+      await fetchLatestComments();
+      
     } catch (error) {
       console.error('Error fetching leads:', error);
       setError(error.message);
@@ -429,6 +473,7 @@ const ColdLeads = ({ onLogout, user }) => {
       }
 
       await fetchLastActivityData();
+      await fetchLatestComments();
 
       return convertedLead;
     } catch (error) {
@@ -639,25 +684,72 @@ const ColdLeads = ({ onLogout, user }) => {
     }
   };
 
-  const handleStageDropdownToggle = (e, leadId) => {
+  const openStageChangeModal = (e, leadId, currentStage) => {
     e.stopPropagation();
-    setStageDropdownOpen(stageDropdownOpen === leadId ? null : leadId);
+    setStageChangeModal({
+      isOpen: true,
+      leadId: leadId,
+      currentStage: currentStage,
+      selectedStage: null,
+      comment: '',
+      error: ''
+    });
   };
 
-  const handleStageChangeFromDropdown = async (e, leadId, newStageKey) => {
-    e.stopPropagation();
-    
+  const closeStageChangeModal = () => {
+    setStageChangeModal({
+      isOpen: false,
+      leadId: null,
+      currentStage: null,
+      selectedStage: null,
+      comment: '',
+      error: ''
+    });
+  };
+
+  const handleStageModalSubmit = async () => {
+    if (!stageChangeModal.comment.trim()) {
+      setStageChangeModal(prev => ({
+        ...prev,
+        error: 'Please add a comment before submitting'
+      }));
+      return;
+    }
+
+    if (!stageChangeModal.selectedStage) {
+      setStageChangeModal(prev => ({
+        ...prev,
+        error: 'Please select a stage'
+      }));
+      return;
+    }
+
     try {
-      const lead = leadsData.find(l => l.id === leadId);
+      const lead = leadsData.find(l => l.id === stageChangeModal.leadId);
       const oldStageKey = lead.stage;
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
-      
+      const newStageKey = stageChangeModal.selectedStage;
+
       const oldStageName = getStageDisplayName(oldStageKey);
       const newStageName = getStageDisplayName(newStageKey);
-      
+
+      const updatedScore = getStageScore(newStageKey);
+      const updatedCategory = getStageCategory(newStageKey);
+
       if (oldStageKey !== newStageKey) {
-        await logStageChange(leadId, oldStageName, newStageName, 'table dropdown');
+        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table. Comment: "${stageChangeModal.comment}"`;
+        await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
+        
+        const { error: logError } = await supabase
+          .from(TABLE_NAMES.LOGS)
+          .insert([{
+            main_action: 'Stage Updated',
+            description: descriptionWithComment,
+            table_name: TABLE_NAMES.LEADS,
+            record_id: stageChangeModal.leadId.toString(),
+            action_timestamp: new Date().toISOString()
+          }]);
+
+        if (logError) console.error('Error logging stage change with comment:', logError);
       }
 
       let updateData = { 
@@ -679,26 +771,32 @@ const ColdLeads = ({ onLogout, user }) => {
       const { error } = await supabase
         .from(TABLE_NAMES.LEADS)
         .update(updateData)
-        .eq('id', leadId);
+        .eq('id', stageChangeModal.leadId);
 
       if (error) {
         throw error;
       }
 
-      await fetchLastActivityData();
+      setLatestComments(prev => ({
+        ...prev,
+        [stageChangeModal.leadId]: stageChangeModal.comment
+      }));
 
       if (updatedCategory !== 'Cold') {
-        const updatedLeads = leadsData.filter(lead => lead.id !== leadId);
+        const updatedLeads = leadsData.filter(lead => lead.id !== stageChangeModal.leadId);
         setLeadsData(updatedLeads);
       } else {
         await fetchLeads();
       }
-      
-      setStageDropdownOpen(null);
+
+      closeStageChangeModal();
       
     } catch (error) {
       console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
+      setStageChangeModal(prev => ({
+        ...prev,
+        error: 'Error updating stage: ' + error.message
+      }));
     }
   };
 
@@ -763,7 +861,7 @@ const ColdLeads = ({ onLogout, user }) => {
       );
     }
     
-    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, getStageDisplayName, getStageKeyFromName);
+    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, alertFilter, getStageDisplayName, getStageKeyFromName);
   };
 
   const allFilteredLeads = getDisplayLeads();
@@ -871,37 +969,11 @@ const ColdLeads = ({ onLogout, user }) => {
               Cold Leads {coldLeadsCount}
             </span>
             
-            {selectedLeads.length >0 && (
+            {selectedLeads.length > 0 && (
               <button 
                 className="delete-selected-btn" 
                 onClick={handleDeleteClick}
                 disabled={isDeleting}
-                style={{
-                  marginLeft: '16px',
-                  padding: '8px 12px',
-                  background: '#dc2626',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: isDeleting ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  opacity: isDeleting ? 0.6 : 1,
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isDeleting) {
-                    e.target.style.background = '#b91c1c';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isDeleting) {
-                    e.target.style.background = '#dc2626';
-                  }
-                }}
               >
                 <Trash2 size={16} />
                 Delete {selectedLeads.length} Selected
@@ -926,9 +998,11 @@ const ColdLeads = ({ onLogout, user }) => {
                 counsellorFilters={counsellorFilters}
                 stageFilters={stageFilters}
                 statusFilters={statusFilters}
+                alertFilter={alertFilter}
                 setCounsellorFilters={setCounsellorFilters}
                 setStageFilters={setStageFilters}
                 setStatusFilters={setStatusFilters}
+                setAlertFilter={setAlertFilter}
                 settingsData={settingsData}
                 getFieldLabel={getFieldLabel}
                 getStageKeyFromName={getStageKeyFromName}
@@ -938,25 +1012,6 @@ const ColdLeads = ({ onLogout, user }) => {
                 className="import-leads-btn" 
                 onClick={handleShowImportModal}
                 title="Import Leads"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: '#10b981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#059669';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#10b981';
-                }}
               >
                 <Plus size={20} />
               </button>
@@ -974,9 +1029,11 @@ const ColdLeads = ({ onLogout, user }) => {
                 counsellorFilters={counsellorFilters}
                 stageFilters={stageFilters}
                 statusFilters={statusFilters}
+                alertFilter={alertFilter}
                 setCounsellorFilters={setCounsellorFilters}
                 setStageFilters={setStageFilters}
                 setStatusFilters={setStatusFilters}
+                setAlertFilter={setAlertFilter}
                 settingsData={settingsData}
                 getFieldLabel={getFieldLabel}
                 getStageKeyFromName={getStageKeyFromName}
@@ -997,7 +1054,7 @@ const ColdLeads = ({ onLogout, user }) => {
 
         {totalPages > 1 && <PaginationControls />}
 
-        <div className="nova-table-container">
+        <div className="nova-table-container" style={{marginTop:'85px'}}>
           <table className="nova-table">
             <thead>
               <tr>
@@ -1016,6 +1073,7 @@ const ColdLeads = ({ onLogout, user }) => {
                 <th>Stage</th>
                 <th className="desktop-only">Status</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
+                <th>Notes</th>
                 <th>Reactivate</th>
               </tr>
             </thead>
@@ -1050,97 +1108,17 @@ const ColdLeads = ({ onLogout, user }) => {
                     <td>{formatPhoneForMobile(lead.phone)}</td>
                     <td>{lead.grade}</td>
                     <td>
-                      <div className="stage-dropdown-container" style={{ position: 'relative', width: '100%' }}>
+                      <div className="stage-badge-container">
                         <div 
-                          className="stage-badge stage-dropdown-trigger" 
+                          className="stage-badge stage-trigger" 
                           style={{ 
                             backgroundColor: getStageColorFromSettings(lead.stage), 
-                            color: '#333',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            width: 'max-content',
-                            minWidth: '140px',
-                            padding: '6px 8px',
-                            borderRadius: '4px',
-                            border: '1px solid rgba(0,0,0,0.1)',
-                            fontWeight: '600',
-                            fontSize: '12px'
+                            color: '#333'
                           }}
-                          onClick={(e) => handleStageDropdownToggle(e, lead.id)}
+                          onClick={(e) => openStageChangeModal(e, lead.id, lead.stage)}
                         >
-                          <span style={{ fontWeight: '600' }}>{getStageDisplayName(lead.stage)}</span>
-                          <ChevronDown 
-                            size={14} 
-                            style={{ 
-                              flexShrink: 0,
-                              transition: 'transform 0.2s ease',
-                              transform: stageDropdownOpen === lead.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                              marginLeft: '8px'
-                            }} 
-                          />
+                          <span>{getStageDisplayName(lead.stage)}</span>
                         </div>
-                        
-                        {stageDropdownOpen === lead.id && (
-                          <div className="stage-dropdown-menu" style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 70,
-                            background: 'white',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '6px',
-                            boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)',
-                            zIndex: 1000,
-                            maxHeight: '380px',
-                            overflowY: 'auto',
-                            marginTop: '2px',
-                            minWidth: '150px',
-                            width: 'max-content'
-                          }}>
-                            {stages.map((stage, index) => (
-                              <div
-                                key={stage.value}
-                                className="stage-dropdown-item"
-                                style={{
-                                  padding: '8px 12px',
-                                  cursor: 'pointer',
-                                  backgroundColor: 'white',
-                                  color: '#333',
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  borderBottom: index < stages.length - 1 ? '1px solid #f3f4f6' : 'none',
-                                  transition: 'all 0.15s ease',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                onClick={(e) => handleStageChangeFromDropdown(e, lead.id, stage.value)}
-                                onMouseEnter={(e) => {
-                                  e.target.style.backgroundColor = '#f8f9fa';
-                                  e.target.style.transform = 'translateX(2px)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.target.style.backgroundColor = 'white';
-                                  e.target.style.transform = 'translateX(0px)';
-                                }}
-                              >
-                                <span 
-                                  style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    backgroundColor: stage.color,
-                                    border: '1px solid rgba(0,0,0,0.15)',
-                                    flexShrink: 0
-                                  }}
-                                ></span>
-                                <span style={{ flex: 1 }}>{stage.label}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </td>
                     
@@ -1153,6 +1131,18 @@ const ColdLeads = ({ onLogout, user }) => {
                       <div className="counsellor-avatar">
                         {getCounsellorInitials(lead.counsellor)}
                       </div>
+                    </td>
+                    <td>
+                      {latestComments[lead.id] ? (
+                        <div className="comment-cell">
+                          <span className="view-comment-link">View</span>
+                          <div className="comment-tooltip">
+                            {latestComments[lead.id]}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="no-comment">-</span>
+                      )}
                     </td>
                     <td>
                       <button 
@@ -1181,7 +1171,7 @@ const ColdLeads = ({ onLogout, user }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="no-data">
+                  <td colSpan="10" className="no-data">
                     {searchTerm 
                       ? 'No cold leads found for your search.' 
                       : 'No cold leads available. Cold leads will appear here when leads have no response.'}
@@ -1194,6 +1184,81 @@ const ColdLeads = ({ onLogout, user }) => {
 
         {totalPages > 1 && <PaginationControls />}
       </div>
+
+      {/* Stage Change Modal */}
+      {stageChangeModal.isOpen && (
+        <div className="stage-modal-overlay" onClick={closeStageChangeModal}>
+          <div className="stage-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="stage-modal-header">
+              <h3>Change Lead Stage</h3>
+              <button 
+                className="stage-modal-close-btn" 
+                onClick={closeStageChangeModal}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="stage-modal-body">
+              <div className="stage-modal-form-group">
+                <label className="stage-modal-label">Select New Stage</label>
+                <select
+                  value={stageChangeModal.selectedStage || ''}
+                  onChange={(e) => setStageChangeModal(prev => ({
+                    ...prev,
+                    selectedStage: e.target.value,
+                    error: ''
+                  }))}
+                  className="stage-modal-select"
+                >
+                  <option value="">-- Select Stage --</option>
+                  {stages.map(stage => (
+                    <option key={stage.value} value={stage.value}>
+                      {stage.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="stage-modal-form-group">
+                <label className="stage-modal-label">Comment (Required)</label>
+                <textarea
+                  value={stageChangeModal.comment}
+                  onChange={(e) => setStageChangeModal(prev => ({
+                    ...prev,
+                    comment: e.target.value,
+                    error: ''
+                  }))}
+                  placeholder="Enter reason for stage change..."
+                  className="stage-modal-textarea"
+                  rows="4"
+                />
+              </div>
+
+              {stageChangeModal.error && (
+                <div className="stage-modal-error">
+                  {stageChangeModal.error}
+                </div>
+              )}
+            </div>
+
+            <div className="stage-modal-footer">
+              <button 
+                className="stage-modal-cancel-btn" 
+                onClick={closeStageChangeModal}
+              >
+                Cancel
+              </button>
+              <button 
+                className="stage-modal-submit-btn" 
+                onClick={handleStageModalSubmit}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <LeadSidebar
         key={selectedLead?.id}
