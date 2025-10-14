@@ -671,7 +671,7 @@ const LeadsTable = ({ onLogout, user }) => {
       const updatedCategory = getStageCategory(newStageKey);
 
       if (oldStageKey !== newStageKey) {
-        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table. Comment: "${stageChangeModal.comment}"`;
+        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table.  Comment: "${stageChangeModal.comment}". Current Stage is  "${newStageName}".`;
         await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
         
         // Log the comment separately
