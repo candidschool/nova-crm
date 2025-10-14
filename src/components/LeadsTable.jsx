@@ -215,6 +215,8 @@ const LeadsTable = ({ onLogout, user }) => {
       stage2_r2: dbRecord.stage2_r2 || '',
       stage7_r1: dbRecord.stage7_r1 || '',
       stage7_r2: dbRecord.stage7_r2 || '',
+      meeting_confirmed: dbRecord.meeting_confirmed || '',
+      visit_confirmed: dbRecord.visit_confirmed || '',
       previousStage: dbRecord.previous_stage || '',
       customFields: customFieldsMap[dbRecord.id] || {},
       createdTime: new Date(dbRecord.created_at).toLocaleString('en-GB', {
@@ -252,7 +254,9 @@ const LeadsTable = ({ onLogout, user }) => {
       visitLocation: lead.visitLocation || '',
       registrationFees: lead.registrationFees || '',
       enrolled: lead.enrolled || '',
-      notes: lead.notes || ''
+      notes: lead.notes || '',
+      meeting_confirmed: lead.meeting_confirmed || '',
+      visit_confirmed: lead.visit_confirmed || ''
     };
 
     return baseFormData;
