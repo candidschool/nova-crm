@@ -264,7 +264,9 @@ const FollowUpTable = ({ onLogout, user }) => {
       visitLocation: lead.visitLocation || '',
       registrationFees: lead.registrationFees || '',
       enrolled: lead.enrolled || '',
-      notes: lead.notes || ''
+      notes: lead.notes || '',
+      meeting_confirmed: lead.meeting_confirmed || '',
+      visit_confirmed: lead.visit_confirmed || ''
     };
 
     return baseFormData;
