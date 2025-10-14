@@ -935,7 +935,7 @@ const LeadSidebar = ({
                 className={`lead-sidebar-tab-button ${activeTab === 'history' ? 'active' : ''}`}
               >
                 <FileText size={isMobile ? 18 : 16} /> 
-                {isMobile ? 'History' : 'History'}
+                {isMobile ? 'Comments' : 'Comments'}
               </button>
             </div>
           </div>
