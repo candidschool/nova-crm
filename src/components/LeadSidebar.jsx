@@ -867,59 +867,7 @@ const LeadSidebar = ({
             {/* Right Column */}
             <div>
               {/* Stage with stage_key support */}
-              <div className="lead-sidebar-stage-container">
-                <label className="lead-sidebar-stage-label">
-                  Stage
-                </label>
-                <div className="lead-sidebar-stage-dropdown">
-                  <div 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setStageDropdownOpen(!stageDropdownOpen);
-                    }}
-                    className="lead-sidebar-stage-button"
-                    style={{ backgroundColor: getStageColorForLead(currentStageKey) }}
-                  >
-                    <span>{currentStageDisplayName}</span>
-                    <ChevronDown 
-                      size={isMobile ? 16 : 12} 
-                      style={{ 
-                        transform: stageDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease'
-                      }} 
-                    />
-                  </div>
-                  
-                  {stageDropdownOpen && (
-                    <div 
-                      onClick={(e) => e.stopPropagation()}
-                      className="lead-sidebar-stage-dropdown-menu"
-                    >
-                      {stages.map((stage, index) => {
-                        const stageKey = getStageKeyFromName(stage.value) || stage.value;
-                        const stageName = stage.label;
-                        
-                        return (
-                          <div
-                            key={stage.value}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStageChange(stageKey);
-                            }}
-                            className="lead-sidebar-stage-item"
-                          >
-                            <span 
-                              className="lead-sidebar-stage-dot"
-                              style={{ backgroundColor: stage.color }}
-                            ></span>
-                            <span style={{ flex: 1, whiteSpace: 'nowrap' }}>{stageName}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
+              
 
               {/* Status with stage_key support */}
               <div className="lead-sidebar-info-row">
