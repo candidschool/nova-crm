@@ -12,6 +12,7 @@ import SettingsDataProvider, { useSettingsData } from '../contexts/SettingsDataP
 import ImportLeadsModal from './ImportLeadsModal';
 import { TABLE_NAMES } from '../config/tableNames';
 import MobileHeaderDropdown from './MobileHeaderDropdown';
+
 import { 
   Search,
   Filter,
@@ -34,7 +35,8 @@ import {
   DollarSign,
   CheckCircle,
   Trash2,
-  Plus
+  Plus,
+  X
 } from 'lucide-react';
 
 const EnrolledLeads = ({ onLogout, user }) => {
@@ -72,6 +74,14 @@ const EnrolledLeads = ({ onLogout, user }) => {
   const [filteredLeads, setFilteredLeads] = useState([]);
 
   const [stageDropdownOpen, setStageDropdownOpen] = useState(null);
+  const [stageChangeModal, setStageChangeModal] = useState({
+    isOpen: false,
+    leadId: null,
+    currentStage: null,
+    selectedStage: null,
+    comment: '',
+    error: ''
+  });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -106,7 +116,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
     notes: ''
   });
 
-  const [lastActivityData, setLastActivityData] = useState({});
+  const [latestComments, setLatestComments] = useState({});
 
   const [showFilter, setShowFilter] = useState(false);
   const [counsellorFilters, setCounsellorFilters] = useState([]);
@@ -141,7 +151,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
     return stageValue;
   };
 
-  // ✅ OPTIMIZED: Synchronous conversion function (no async needed)
   const convertDatabaseToUI = (dbRecord, customFieldsMap) => {
     let meetingDate = '';
     let meetingTime = '';
@@ -318,13 +327,13 @@ const EnrolledLeads = ({ onLogout, user }) => {
   }, [searchTerm, counsellorFilters, stageFilters, statusFilters, alertFilter]);
 
   const getStageCount = (stageName) => {
-  const stageKey = getStageKeyFromName(stageName);
-  return leadsData.filter(lead => {
-    const leadStageKey = getStageKeyForLead(lead.stage);
-    const isEnrolledLead = lead.category === 'Enrolled';
-    return isEnrolledLead && (leadStageKey === stageKey || lead.stage === stageName);
-  }).length;
-};
+    const stageKey = getStageKeyFromName(stageName);
+    return leadsData.filter(lead => {
+      const leadStageKey = getStageKeyForLead(lead.stage);
+      const isEnrolledLead = lead.category === 'Enrolled';
+      return isEnrolledLead && (leadStageKey === stageKey || lead.stage === stageName);
+    }).length;
+  };
 
   const getStageColorFromSettings = (stageValue) => {
     const stageKey = getStageKeyForLead(stageValue);
@@ -338,44 +347,37 @@ const EnrolledLeads = ({ onLogout, user }) => {
     return firstTwoWords.map(word => word.charAt(0).toUpperCase()).join('');
   };
 
-  const fetchLastActivityData = async () => {
+  const fetchLatestComments = async () => {
     try {
       const { data, error } = await supabase
-        .from(TABLE_NAMES.LAST_ACTIVITY_BY_LEAD)
-        .select('*');
+        .from(TABLE_NAMES.LOGS)
+        .select('record_id, description')
+        .eq('main_action', 'Stage Updated')
+        .order('action_timestamp', { ascending: false });
 
       if (error) throw error;
 
-      const activityMap = {};
-      data.forEach(item => {
-        activityMap[item.record_id] = item.last_activity;
+      const comments = {};
+      const seen = new Set();
+
+      data?.forEach(entry => {
+        const leadId = entry.record_id;
+        if (!seen.has(leadId)) {
+          const description = entry.description;
+          const commentMatch = description.match(/Comment:\s*"([^"]*)"/);
+          if (commentMatch) {
+            comments[leadId] = commentMatch[1];
+            seen.add(leadId);
+          }
+        }
       });
 
-      setLastActivityData(activityMap);
+      setLatestComments(comments);
     } catch (error) {
-      console.error('Error fetching last activity data:', error);
+      console.error('Error fetching latest comments:', error);
     }
   };
 
-  const getDaysSinceLastActivity = (leadId) => {
-    const lastActivity = lastActivityData[leadId];
-    if (!lastActivity) {
-      return 0;
-    }
-    
-    const lastActivityDate = new Date(lastActivity);
-    const today = new Date();
-    const diffTime = today - lastActivityDate;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const shouldShowAlert = (leadId) => {
-    const days = getDaysSinceLastActivity(leadId);
-    return days >= 3;
-  };
-
-  // ✅ OPTIMIZED: Bulk fetch leads and custom fields
   const fetchLeads = async () => {
     try {
       setLoading(true);
@@ -383,7 +385,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
       
       console.time('Total Fetch Time');
       
-      // Fetch all leads in batches
       let allLeads = [];
       let from = 0;
       const batchSize = 1000;
@@ -414,16 +415,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
 
       console.log('Total leads fetched from database:', allLeads.length);
       
-      // Fetch activity data
-      console.time('Activity Fetch');
-      const { data: activityData, error: activityError } = await supabase
-        .from(TABLE_NAMES.LAST_ACTIVITY_BY_LEAD)
-        .select('*');
-      
-      if (activityError) throw activityError;
-      console.timeEnd('Activity Fetch');
-
-      // ✅ BULK FETCH: Get ALL custom fields in ONE query
       console.time('Custom Fields Bulk Fetch');
       console.log('Bulk fetching custom fields for all leads...');
       const leadIds = allLeads.map(lead => lead.id);
@@ -431,7 +422,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
       console.timeEnd('Custom Fields Bulk Fetch');
       console.log('Custom fields bulk fetch complete');
 
-      // ✅ OPTIMIZED: Convert leads with pre-fetched custom fields (synchronous map)
       console.time('Data Conversion');
       console.log('Converting leads data...');
       const convertedData = allLeads.map(dbRecord => 
@@ -439,19 +429,13 @@ const EnrolledLeads = ({ onLogout, user }) => {
       );
       console.timeEnd('Data Conversion');
       console.log('Leads data converted. Total:', convertedData.length);
-      
-      // Set activity data
-      const activityMap = {};
-      activityData.forEach(item => {
-        activityMap[item.record_id] = item.last_activity;
-      });
-      setLastActivityData(activityMap);
 
-      // Set leads data
       setLeadsData(convertedData);
       
       console.timeEnd('Total Fetch Time');
       setLoading(false);
+      
+      await fetchLatestComments();
       
     } catch (error) {
       console.error('Error fetching leads:', error);
@@ -460,7 +444,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
     }
   };
 
-  // Refresh single lead function
   const refreshSingleLead = async (leadId) => {
     try {
       const { data, error } = await supabase
@@ -471,7 +454,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
 
       if (error) throw error;
 
-      // Fetch custom fields for this single lead
       const customFields = await settingsService.getCustomFieldsForLead(leadId);
       const customFieldsMap = { [leadId]: customFields };
 
@@ -488,7 +470,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
         setSidebarFormData(setupSidebarFormDataWithCustomFields(convertedLead));
       }
 
-      await fetchLastActivityData();
+      await fetchLatestComments();
 
       return convertedLead;
     } catch (error) {
@@ -562,79 +544,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
     }));
   };
 
-  const handleSidebarStageChange = async (leadId, newStageKey) => {
-    try {
-      const lead = leadsData.find(l => l.id === leadId);
-      const oldStageKey = lead.stage;
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
-      
-      const oldStageName = getStageDisplayName(oldStageKey);
-      const newStageName = getStageDisplayName(newStageKey);
-      
-      if (oldStageKey !== newStageKey) {
-        await logStageChange(leadId, oldStageName, newStageName, 'sidebar');
-      }
-
-      let updateData = { 
-        stage: newStageKey,
-        score: updatedScore, 
-        category: updatedCategory,
-        updated_at: new Date().toISOString()
-      };
-
-      const noResponseKey = getStageKeyFromName('No Response');
-      if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
-        updateData.previous_stage = oldStageKey;
-      }
-
-      if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
-        updateData.previous_stage = null;
-      }
-
-      const { error } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .update(updateData)
-        .eq('id', leadId);
-
-      if (error) {
-        throw error;
-      }
-
-      await fetchLastActivityData();
-
-      const updatedLeads = leadsData.map(lead => 
-        lead.id === leadId 
-          ? { 
-              ...lead, 
-              stage: newStageKey, 
-              stageDisplayName: newStageName,
-              score: updatedScore, 
-              category: updatedCategory 
-            }
-          : lead
-      );
-      
-      setLeadsData(updatedLeads);
-
-      if (selectedLead && selectedLead.id === leadId) {
-        setSelectedLead({
-          ...selectedLead,
-          stage: newStageKey,
-          stageDisplayName: newStageName,
-          score: updatedScore,
-          category: updatedCategory
-        });
-      }
-
-      alert('Stage updated successfully!');
-      
-    } catch (error) {
-      console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
-    }
-  };
-
   const handleUpdateAllFields = async () => {
     try {
       console.log('handleUpdateAllFields called with sidebarFormData:', sidebarFormData);
@@ -679,15 +588,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
         updateData.visit_datetime = `${sidebarFormData.visitDate}T${sidebarFormData.visitTime}:00`;
       }
 
-      const oldStageKey = selectedLead.stage;
-      const newStageKey = stageKey;
-      
-      if (oldStageKey !== newStageKey) {
-        const oldStageName = getStageDisplayName(oldStageKey);
-        const newStageName = getStageDisplayName(newStageKey);
-        await logStageChange(selectedLead.id, oldStageName, newStageName, 'sidebar edit all');
-      }
-
       console.log('Database update data:', updateData);
 
       const { error } = await supabase
@@ -700,8 +600,6 @@ const EnrolledLeads = ({ onLogout, user }) => {
       }
 
       console.log('Database update successful');
-
-      await fetchLastActivityData();
 
       await fetchLeads();
 
@@ -717,25 +615,72 @@ const EnrolledLeads = ({ onLogout, user }) => {
     }
   };
 
-  const handleStageDropdownToggle = (e, leadId) => {
+  const openStageChangeModal = (e, leadId, currentStage) => {
     e.stopPropagation();
-    setStageDropdownOpen(stageDropdownOpen === leadId ? null : leadId);
+    setStageChangeModal({
+      isOpen: true,
+      leadId: leadId,
+      currentStage: currentStage,
+      selectedStage: null,
+      comment: '',
+      error: ''
+    });
   };
 
-  const handleStageChangeFromDropdown = async (e, leadId, newStageKey) => {
-    e.stopPropagation();
-    
+  const closeStageChangeModal = () => {
+    setStageChangeModal({
+      isOpen: false,
+      leadId: null,
+      currentStage: null,
+      selectedStage: null,
+      comment: '',
+      error: ''
+    });
+  };
+
+  const handleStageModalSubmit = async () => {
+    if (!stageChangeModal.comment.trim()) {
+      setStageChangeModal(prev => ({
+        ...prev,
+        error: 'Please add a comment before submitting'
+      }));
+      return;
+    }
+
+    if (!stageChangeModal.selectedStage) {
+      setStageChangeModal(prev => ({
+        ...prev,
+        error: 'Please select a stage'
+      }));
+      return;
+    }
+
     try {
-      const lead = leadsData.find(l => l.id === leadId);
+      const lead = leadsData.find(l => l.id === stageChangeModal.leadId);
       const oldStageKey = lead.stage;
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
-      
+      const newStageKey = stageChangeModal.selectedStage;
+
       const oldStageName = getStageDisplayName(oldStageKey);
       const newStageName = getStageDisplayName(newStageKey);
-      
+
+      const updatedScore = getStageScore(newStageKey);
+      const updatedCategory = getStageCategory(newStageKey);
+
       if (oldStageKey !== newStageKey) {
-        await logStageChange(leadId, oldStageName, newStageName, 'table dropdown');
+        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table. Comment: "${stageChangeModal.comment}"`;
+        await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
+        
+        const { error: logError } = await supabase
+          .from(TABLE_NAMES.LOGS)
+          .insert([{
+            main_action: 'Stage Updated',
+            description: descriptionWithComment,
+            table_name: TABLE_NAMES.LEADS,
+            record_id: stageChangeModal.leadId.toString(),
+            action_timestamp: new Date().toISOString()
+          }]);
+
+        if (logError) console.error('Error logging stage change with comment:', logError);
       }
 
       let updateData = { 
@@ -757,16 +702,14 @@ const EnrolledLeads = ({ onLogout, user }) => {
       const { error } = await supabase
         .from(TABLE_NAMES.LEADS)
         .update(updateData)
-        .eq('id', leadId);
+        .eq('id', stageChangeModal.leadId);
 
       if (error) {
         throw error;
       }
 
-      await fetchLastActivityData();
-
       const updatedLeads = leadsData.map(lead => 
-        lead.id === leadId 
+        lead.id === stageChangeModal.leadId 
           ? { 
               ...lead, 
               stage: newStageKey, 
@@ -778,12 +721,20 @@ const EnrolledLeads = ({ onLogout, user }) => {
       );
       
       setLeadsData(updatedLeads);
-      
-      setStageDropdownOpen(null);
+
+      setLatestComments(prev => ({
+        ...prev,
+        [stageChangeModal.leadId]: stageChangeModal.comment
+      }));
+
+      closeStageChangeModal();
       
     } catch (error) {
       console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
+      setStageChangeModal(prev => ({
+        ...prev,
+        error: 'Error updating stage: ' + error.message
+      }));
     }
   };
 
@@ -876,14 +827,11 @@ const EnrolledLeads = ({ onLogout, user }) => {
       );
     }
     
-    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, alertFilter, getStageDisplayName, getStageKeyFromName, getDaysSinceLastActivity);
+    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, alertFilter, getStageDisplayName, getStageKeyFromName);
   };
 
   const allFilteredLeads = getDisplayLeads();
 
-  const enrolledLeadsCount = leadsData.filter(lead => lead.category === 'Enrolled').length;
-
-  
   const totalPages = Math.ceil(allFilteredLeads.length / leadsPerPage);
   const startIndex = (currentPage - 1) * leadsPerPage;
   const endIndex = startIndex + leadsPerPage;
@@ -969,7 +917,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
         activeNavItem="leads"
         activeSubmenuItem="enrolled"
         stages={stages}
-        getStageCount={enrolledLeadsCount}
+        getStageCount={getStageCount}
         stagesTitle="Enrolled Stages"
         stagesIcon={Play}
         onLogout={onLogout}
@@ -1071,7 +1019,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
 
         {totalPages > 1 && <PaginationControls />}
 
-        <div className="nova-table-container">
+        <div className="nova-table-container" style={{marginTop:'85px'}}>
           <table className="nova-table">
             <thead>
               <tr>
@@ -1090,7 +1038,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
                 <th>Stage</th>
                 <th className="desktop-only">Status</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
-                <th>Alert</th>
+                <th>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -1124,97 +1072,17 @@ const EnrolledLeads = ({ onLogout, user }) => {
                     <td>{formatPhoneForMobile(lead.phone)}</td>
                     <td>{lead.grade}</td>
                     <td>
-                      <div className="stage-dropdown-container" style={{ position: 'relative', width: '100%' }}>
+                      <div className="stage-badge-container">
                         <div 
-                          className="stage-badge stage-dropdown-trigger" 
+                          className="stage-badge stage-trigger" 
                           style={{ 
                             backgroundColor: getStageColorFromSettings(lead.stage), 
-                            color: '#333',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            width: 'max-content',
-                            minWidth: '140px',
-                            padding: '6px 8px',
-                            borderRadius: '4px',
-                            border: '1px solid rgba(0,0,0,0.1)',
-                            fontWeight: '600',
-                            fontSize: '12px'
+                            color: '#333'
                           }}
-                          onClick={(e) => handleStageDropdownToggle(e, lead.id)}
+                          onClick={(e) => openStageChangeModal(e, lead.id, lead.stage)}
                         >
-                          <span style={{ fontWeight: '600' }}>{getStageDisplayName(lead.stage)}</span>
-                          <ChevronDown 
-                            size={14} 
-                            style={{ 
-                              flexShrink: 0,
-                              transition: 'transform 0.2s ease',
-                              transform: stageDropdownOpen === lead.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                              marginLeft: '8px'
-                            }} 
-                          />
+                          <span>{getStageDisplayName(lead.stage)}</span>
                         </div>
-                        
-                        {stageDropdownOpen === lead.id && (
-                          <div className="stage-dropdown-menu" style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 70,
-                            background: 'white',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '6px',
-                            boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)',
-                            zIndex: 1000,
-                            maxHeight: '380px',
-                            overflowY: 'auto',
-                            marginTop: '2px',
-                            minWidth: '150px',
-                            width: 'max-content'
-                          }}>
-                            {stages.map((stage, index) => (
-                              <div
-                                key={stage.value}
-                                className="stage-dropdown-item"
-                                style={{
-                                  padding: '8px 12px',
-                                  cursor: 'pointer',
-                                  backgroundColor: 'white',
-                                  color: '#333',
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  borderBottom: index < stages.length - 1 ? '1px solid #f3f4f6' : 'none',
-                                  transition: 'all 0.15s ease',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                onClick={(e) => handleStageChangeFromDropdown(e, lead.id, stage.value)}
-                                onMouseEnter={(e) => {
-                                  e.target.style.backgroundColor = '#f8f9fa';
-                                  e.target.style.transform = 'translateX(2px)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.target.style.backgroundColor = 'white';
-                                  e.target.style.transform = 'translateX(0px)';
-                                }}
-                              >
-                                <span 
-                                  style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    backgroundColor: stage.color,
-                                    border: '1px solid rgba(0,0,0,0.15)',
-                                    flexShrink: 0
-                                  }}
-                                ></span>
-                                <span style={{ flex: 1 }}>{stage.label}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </td>
                     
@@ -1229,10 +1097,15 @@ const EnrolledLeads = ({ onLogout, user }) => {
                       </div>
                     </td>
                     <td>
-                      {shouldShowAlert(lead.id) && (
-                        <div className="alert-badge">
-                          {getDaysSinceLastActivity(lead.id)}D
+                      {latestComments[lead.id] ? (
+                        <div className="comment-cell">
+                          <span className="view-comment-link">View</span>
+                          <div className="comment-tooltip">
+                            {latestComments[lead.id]}
+                          </div>
                         </div>
+                      ) : (
+                        <span className="no-comment">-</span>
                       )}
                     </td>
                   </tr>
@@ -1242,7 +1115,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
                   <td colSpan="9" className="no-data">
                     {searchTerm 
                       ? 'No results found for your search.' 
-                      : 'No Enrolled leads available. Enrolled leads will appear here when their status changes to "Enrolled".'}
+                      : 'No enrolled leads available. Enrolled leads will appear here when their status changes to "Enrolled".'}
                   </td>
                 </tr>
               )}
@@ -1252,6 +1125,81 @@ const EnrolledLeads = ({ onLogout, user }) => {
 
         {totalPages > 1 && <PaginationControls />}
       </div>
+
+      {/* Stage Change Modal */}
+      {stageChangeModal.isOpen && (
+        <div className="stage-modal-overlay" onClick={closeStageChangeModal}>
+          <div className="stage-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="stage-modal-header">
+              <h3>Change Lead Stage</h3>
+              <button 
+                className="stage-modal-close-btn" 
+                onClick={closeStageChangeModal}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="stage-modal-body">
+              <div className="stage-modal-form-group">
+                <label className="stage-modal-label">Select New Stage</label>
+                <select
+                  value={stageChangeModal.selectedStage || ''}
+                  onChange={(e) => setStageChangeModal(prev => ({
+                    ...prev,
+                    selectedStage: e.target.value,
+                    error: ''
+                  }))}
+                  className="stage-modal-select"
+                >
+                  <option value="">-- Select Stage --</option>
+                  {stages.map(stage => (
+                    <option key={stage.value} value={stage.value}>
+                      {stage.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="stage-modal-form-group">
+                <label className="stage-modal-label">Comment (Required)</label>
+                <textarea
+                  value={stageChangeModal.comment}
+                  onChange={(e) => setStageChangeModal(prev => ({
+                    ...prev,
+                    comment: e.target.value,
+                    error: ''
+                  }))}
+                  placeholder="Enter reason for stage change..."
+                  className="stage-modal-textarea"
+                  rows="4"
+                />
+              </div>
+
+              {stageChangeModal.error && (
+                <div className="stage-modal-error">
+                  {stageChangeModal.error}
+                </div>
+              )}
+            </div>
+
+            <div className="stage-modal-footer">
+              <button 
+                className="stage-modal-cancel-btn" 
+                onClick={closeStageChangeModal}
+              >
+                Cancel
+              </button>
+              <button 
+                className="stage-modal-submit-btn" 
+                onClick={handleStageModalSubmit}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <LeadSidebar
         key={selectedLead?.id}
@@ -1265,8 +1213,7 @@ const EnrolledLeads = ({ onLogout, user }) => {
         onEditModeToggle={handleEditModeToggle}
         onFieldChange={handleSidebarFieldChange}
         onUpdateAllFields={handleUpdateAllFields}
-        onStageChange={handleSidebarStageChange}
-        onRefreshActivityData={fetchLastActivityData}
+        onRefreshActivityData={fetchLatestComments}
         onRefreshSingleLead={refreshSingleLead}
         getStageColor={getStageColorFromSettings}
         getCounsellorInitials={getCounsellorInitials}
