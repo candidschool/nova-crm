@@ -167,7 +167,7 @@ const LeftSidebar = ({
               onClick={closeMobileMenu}
             >
               <TrendingUp size={18} className="nav-icon" />
-              Calendar Page
+              Calendar View
             </a>
           
           
