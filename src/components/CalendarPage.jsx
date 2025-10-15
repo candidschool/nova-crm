@@ -405,7 +405,7 @@ const CalendarPage = ({ onLogout, user }) => {
       <div className="calendar-main-content">
         <div className="calendar-header">
           <div className="calendar-header-left">
-            <h1 className="calendar-title">Calendar</h1>
+            <h1 className="calendar-title">Calendar View</h1>
           </div>
           
           <div className="calendar-header-right">
@@ -588,5 +588,6 @@ const CalendarPage = ({ onLogout, user }) => {
     </div>
   );
 };
+
 
 export default CalendarPage;
