@@ -593,16 +593,16 @@ const WarmLeads = ({ onLogout, user }) => {
   };
 
   const openStageChangeModal = (e, leadId, currentStage) => {
-    e.stopPropagation();
-    setStageChangeModal({
-      isOpen: true,
-      leadId: leadId,
-      currentStage: currentStage,
-      selectedStage: null,
-      comment: '',
-      error: ''
-    });
-  };
+  e.stopPropagation();
+  setStageChangeModal({
+    isOpen: true,
+    leadId: leadId,
+    currentStage: currentStage,
+    selectedStage: currentStage,  // ← Set to currentStage
+    comment: '',
+    error: ''
+  });
+};
 
   const closeStageChangeModal = () => {
     setStageChangeModal({
@@ -644,7 +644,7 @@ const WarmLeads = ({ onLogout, user }) => {
       const updatedCategory = getStageCategory(newStageKey);
 
       if (oldStageKey !== newStageKey) {
-        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table. Comment: "${stageChangeModal.comment}"`;
+        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table. <span class="current-stage">Current Stage is "${newStageName}"</span>. Comment: "${stageChangeModal.comment}"`;
         await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
         
         const { error: logError } = await supabase
@@ -1005,7 +1005,7 @@ const WarmLeads = ({ onLogout, user }) => {
                 <th>Stage</th>
                 <th className="desktop-only">Status</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
-                <th>Comment</th>
+                <th>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -1068,7 +1068,23 @@ const WarmLeads = ({ onLogout, user }) => {
                         <div className="comment-cell">
                           <span className="view-comment-link">View</span>
                           <div className="comment-tooltip">
-                            {latestComments[lead.id]}
+                            {(() => {
+                              const comment = latestComments[lead.id];
+                              const parts = comment.split(/<span class="current-stagess">|<\/span>/);
+                              
+                              if (parts.length === 3) {
+                                return (
+                                  <>
+                                    {parts[0]}
+                                    <span style={{ color: '#2563eb', fontWeight: '600' }}>
+                                      {parts[1]}
+                                    </span>
+                                    {parts[2]}
+                                  </>
+                                );
+                              }
+                              return comment;
+                            })()}
                           </div>
                         </div>
                       ) : (
@@ -1111,14 +1127,20 @@ const WarmLeads = ({ onLogout, user }) => {
               <div className="stage-modal-form-group">
                 <label className="stage-modal-label">Select New Stage</label>
                 <select
-                  value={stageChangeModal.selectedStage || ''}
-                  onChange={(e) => setStageChangeModal(prev => ({
-                    ...prev,
-                    selectedStage: e.target.value,
-                    error: ''
-                  }))}
-                  className="stage-modal-select"
-                >
+                      value={stageChangeModal.selectedStage || ''}
+                      onChange={(e) => setStageChangeModal(prev => ({
+                        ...prev,
+                        selectedStage: e.target.value,
+                        error: ''
+                      }))}
+                      className="stage-modal-select"
+                      style={{
+                        backgroundColor: stageChangeModal.selectedStage 
+                          ? getStageColorFromSettings(stageChangeModal.selectedStage)
+                          : '#fff',
+                        color: '#333'
+                      }}
+                    >
                   <option value="">-- Select Stage --</option>
                   {stages.map(stage => (
                     <option key={stage.value} value={stage.value}>
