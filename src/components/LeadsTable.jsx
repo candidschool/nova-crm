@@ -620,16 +620,16 @@ const LeadsTable = ({ onLogout, user }) => {
   };
 
   const openStageChangeModal = (e, leadId, currentStage) => {
-    e.stopPropagation();
-    setStageChangeModal({
-      isOpen: true,
-      leadId: leadId,
-      currentStage: currentStage,
-      selectedStage: null,
-      comment: '',
-      error: ''
-    });
-  };
+  e.stopPropagation();
+  setStageChangeModal({
+    isOpen: true,
+    leadId: leadId,
+    currentStage: currentStage,
+    selectedStage: currentStage,  // ← Set to currentStage
+    comment: '',
+    error: ''
+  });
+};
 
   const closeStageChangeModal = () => {
     setStageChangeModal({
@@ -1149,14 +1149,20 @@ const LeadsTable = ({ onLogout, user }) => {
               <div className="stage-modal-form-group">
                 <label className="stage-modal-label">Select New Stage</label>
                 <select
-                  value={stageChangeModal.selectedStage || ''}
-                  onChange={(e) => setStageChangeModal(prev => ({
-                    ...prev,
-                    selectedStage: e.target.value,
-                    error: ''
-                  }))}
-                  className="stage-modal-select"
-                >
+                        value={stageChangeModal.selectedStage || ''}
+                        onChange={(e) => setStageChangeModal(prev => ({
+                          ...prev,
+                          selectedStage: e.target.value,
+                          error: ''
+                        }))}
+                        className="stage-modal-select"
+                        style={{
+                          backgroundColor: stageChangeModal.selectedStage 
+                            ? getStageColorFromSettings(stageChangeModal.selectedStage)
+                            : '#fff',
+                          color: '#333'
+                        }}
+                      >
                   <option value="">-- Select Stage --</option>
                   {stages.map(stage => (
                     <option key={stage.value} value={stage.value}>
