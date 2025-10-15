@@ -724,6 +724,57 @@ const LeadSidebar = ({
   const handleTouchStart = useCallback((e) => {
   
   }, [isMobile, onClose]);
+  
+  // Helper to format history descriptions with highlighted current stage
+  // Helper to format history descriptions with highlighted current stage
+const formatHistoryDescription = (description) => {
+  const searchText = 'Current Stage is';
+  const startIndex = description.indexOf(searchText);
+  
+  // If "Current Stage is" not found, return as-is
+  if (startIndex === -1) {
+    return description;
+  }
+  
+  // Find the opening quote after "Current Stage is"
+  const quoteStart = description.indexOf('"', startIndex);
+  if (quoteStart === -1) {
+    return description;
+  }
+  
+  // Find the closing quote
+  const quoteEnd = description.indexOf('"', quoteStart + 1);
+  if (quoteEnd === -1) {
+    return description;
+  }
+  
+  // Split into three parts
+  const beforeHighlight = description.substring(0, startIndex);
+  const highlightText = description.substring(startIndex, quoteEnd + 1);
+  const afterHighlight = description.substring(quoteEnd + 1);
+  
+  return (
+    <>
+      {beforeHighlight}
+      <strong 
+        style={{ 
+          color: '#2563eb',
+          backgroundColor: '#dbeafe',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontWeight: '600',
+          fontSize:'12px'
+        }}
+      >
+        {highlightText}
+      </strong>
+      {afterHighlight}
+    </>
+  );
+};
+  
+
+
 
   if (!showSidebar) return null;
 
@@ -1091,7 +1142,7 @@ const LeadSidebar = ({
                           {entry.main_action}
                         </div>
                         <div className="lead-sidebar-history-description">
-                          {entry.description}
+                          {formatHistoryDescription(entry.description)}
                         </div>
                         <div className="lead-sidebar-history-time">
                           {new Date(entry.action_timestamp).toLocaleDateString('en-GB', {
