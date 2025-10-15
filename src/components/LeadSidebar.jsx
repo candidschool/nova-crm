@@ -76,7 +76,6 @@ const LeadSidebar = ({
   onEditModeToggle,
   onFieldChange,
   onUpdateAllFields,
-  onStageChange,
   onRefreshActivityData,
   onRefreshSingleLead,
   getStageColor,
@@ -103,10 +102,9 @@ const LeadSidebar = ({
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
-  const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
 
-  // Stage statuses for action buttons - UPDATED with R1/R2
+  // Stage statuses for action buttons
   const [stageStatuses, setStageStatuses] = useState({
     stage2_status: '',
     stage3_status: '',
@@ -265,21 +263,21 @@ const LeadSidebar = ({
 
   // Fetch follow-ups for the selected lead
   const fetchFollowUps = async () => {
-  if (!selectedLead?.id) return;
-  
-  try {
-    const { data, error } = await supabase
-      .from(TABLE_NAMES.FOLLOW_UPS)
-      .select('id, lead_id, follow_up_date, details, status, created_at')  // ✅ Make sure status is here
-      .eq('lead_id', selectedLead.id)
-      .order('follow_up_date', { ascending: false });
+    if (!selectedLead?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from(TABLE_NAMES.FOLLOW_UPS)
+        .select('id, lead_id, follow_up_date, details, status, created_at')
+        .eq('lead_id', selectedLead.id)
+        .order('follow_up_date', { ascending: false });
 
-    if (error) throw error;
-    setFollowUpData(data || []);
-  } catch (error) {
-    console.error('Error fetching follow-ups:', error);
-  }
-};
+      if (error) throw error;
+      setFollowUpData(data || []);
+    } catch (error) {
+      console.error('Error fetching follow-ups:', error);
+    }
+  };
 
   // Handle follow-up submission
   const handleFollowUpSubmit = async () => {
@@ -310,7 +308,7 @@ const LeadSidebar = ({
     }
   };
 
-  // Update original form data when selectedLead changes - UPDATED with R1/R2 and notes
+  // Update original form data when selectedLead changes
   useEffect(() => {
     if (selectedLead) {
       setOriginalFormData({
@@ -335,10 +333,10 @@ const LeadSidebar = ({
         visitLocation: selectedLead.visitLocation || '',
         registrationFees: selectedLead.registrationFees || '',
         enrolled: selectedLead.enrolled || '',
-        notes: selectedLead.notes || '' // ✅ ADD notes to original data
+        notes: selectedLead.notes || ''
       });
 
-      // Update stage statuses - UPDATED with R1/R2
+      // Update stage statuses
       setStageStatuses({
         stage2_status: selectedLead.stage2_status || '',
         stage3_status: selectedLead.stage3_status || '',
@@ -394,7 +392,7 @@ const LeadSidebar = ({
     }
   };
 
-  // Refresh lead function to pass to InfoTab - UPDATED with R1/R2
+  // Refresh lead function to pass to InfoTab
   const handleRefreshLead = async () => {
     try {
       // Fetch fresh lead data from database
@@ -406,7 +404,7 @@ const LeadSidebar = ({
 
       if (error) throw error;
 
-      // Update stage statuses from fresh data - UPDATED with R1/R2
+      // Update stage statuses from fresh data
       setStageStatuses({
         stage2_status: data.stage2_status || '',
         stage3_status: data.stage3_status || '',
@@ -433,43 +431,7 @@ const LeadSidebar = ({
     }
   };
 
-  // Handle stage change with stage_key support
-  const handleStageChange = async (newStageValue) => {
-    try {
-      console.log('=== STAGE CHANGE ===');
-      console.log('New stage value:', newStageValue);
-      
-      let stageKeyToStore, stageNameToDisplay;
-      
-      if (stageKeyToDataMapping[newStageValue]) {
-        stageKeyToStore = newStageValue;
-        stageNameToDisplay = getStageNameFromKey(newStageValue);
-      } else {
-        stageKeyToStore = getStageKeyFromName(newStageValue);
-        stageNameToDisplay = newStageValue;
-      }
-      
-      console.log('Stage key to store:', stageKeyToStore);
-      console.log('Stage name to display:', stageNameToDisplay);
-      
-      onFieldChange('stage', stageKeyToStore || newStageValue);
-      
-      setStageDropdownOpen(false);
-      
-      if (onStageChange) {
-        await onStageChange(selectedLead.id, stageKeyToStore || newStageValue);
-        
-        if (activeTab === 'history') {
-          fetchHistory();
-        }
-      }
-    } catch (error) {
-      console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
-    }
-  };
-
-  // ✅ UPDATED: Update function with scheduler integration AND notes logging
+  // Update function with scheduler integration AND notes logging
   const handleUpdateAllFields = async () => {
     try {
       const changes = {};
@@ -627,7 +589,7 @@ const LeadSidebar = ({
           }
         }
         
-        // ✅ NEW: Log notes changes separately if they exist
+        // Log notes changes separately if they exist
         if (changes.notes) {
           const oldNotes = changes.notes.oldValue || 'No notes';
           const newNotes = changes.notes.newValue || 'No notes';
@@ -662,21 +624,7 @@ const LeadSidebar = ({
     }
   };
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (stageDropdownOpen) {
-        setStageDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [stageDropdownOpen]);
-
-  // Fetch data based on active tab - UPDATED WITH IMMEDIATE ACTION REFRESH
+  // Fetch data based on active tab
   useEffect(() => {
     if (selectedLead?.id) {
       if (activeTab === 'history') {
@@ -866,10 +814,28 @@ const LeadSidebar = ({
 
             {/* Right Column */}
             <div>
-              {/* Stage with stage_key support */}
-              
+              {/* ✅ STAGE - DISPLAY ONLY (NO DROPDOWN) */}
+              <div className="lead-sidebar-info-row">
+                <label className="lead-sidebar-stage-label">
+                  Stage
+                </label>
+                <div 
+                  className="lead-sidebar-stage-badge" 
+                  style={{ 
+                    backgroundColor: getStageColorForLead(currentStageKey),
+                    color: '#333',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    display: 'inline-block'
+                  }}
+                >
+                  {currentStageDisplayName}
+                </div>
+              </div>
 
-              {/* Status with stage_key support */}
+              {/* Status */}
               <div className="lead-sidebar-info-row">
                 <label className="lead-sidebar-stage-label">
                   Status
@@ -935,7 +901,7 @@ const LeadSidebar = ({
                 className={`lead-sidebar-tab-button ${activeTab === 'history' ? 'active' : ''}`}
               >
                 <FileText size={isMobile ? 18 : 16} /> 
-                {isMobile ? 'Comments' : 'Comments'}
+                {isMobile ? 'History' : 'History'}
               </button>
             </div>
           </div>
@@ -1015,7 +981,7 @@ const LeadSidebar = ({
                     followUpData.map((followUp, index) => {
                       const isFollowUpToday = isToday(followUp.follow_up_date);
                       const isFollowUpFuture = isFuture(followUp.follow_up_date);
-                      const isDone = followUp.status === 'Done'; // ✅ NEW: Check if status is Done
+                      const isDone = followUp.status === 'Done';
                       
                       return (
                         <div 
