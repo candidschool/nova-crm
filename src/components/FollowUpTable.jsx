@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { settingsService } from '../services/settingsService';
-import { logStageChange } from '../utils/historyLogger';
 import LeftSidebar from './LeftSidebar';
 import LeadSidebar from './LeadSidebar';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
@@ -69,25 +68,33 @@ const FollowUpTable = ({ onLogout, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredLeads, setFilteredLeads] = useState([]);
 
-  // Stage dropdown states
-  const [stageDropdownOpen, setStageDropdownOpen] = useState(null);
-
   // Loading and error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // DELETE FUNCTIONALITY - NEW STATES
+  // DELETE FUNCTIONALITY - STATES
   const [selectedLeads, setSelectedLeads] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // VIEW DETAILS POPUP STATES - NEW
+  // VIEW DETAILS POPUP STATES
   const [showDetailsPopup, setShowDetailsPopup] = useState(false);
   const [selectedFollowUpDetails, setSelectedFollowUpDetails] = useState(null);
 
-  // Follow-up Status Dropdown State
-  const [followUpStatusDropdownOpen, setFollowUpStatusDropdownOpen] = useState(null);
+  // Follow-up Status Change Modal
+  const [followUpStatusModal, setFollowUpStatusModal] = useState({
+    isOpen: false,
+    followUpId: null,
+    leadId: null,
+    currentStatus: null,
+    selectedStatus: null,
+    comment: '',
+    error: ''
+  });
+
+  // Store latest follow-up comments per lead
+  const [latestFollowUpComments, setLatestFollowUpComments] = useState({});
 
   // Sidebar editing states
   const [isEditingMode, setIsEditingMode] = useState(false);
@@ -124,12 +131,14 @@ const FollowUpTable = ({ onLogout, user }) => {
   const [stageFilters, setStageFilters] = useState([]);
   const [statusFilters, setStatusFilters] = useState([]);
 
-  // DATE RANGE STATES - NEW FOR FOLLOW-UP TABLE
+  // DATE RANGE STATES
   const [dateRange, setDateRange] = useState({
     startDate: new Date().toISOString().split('T')[0], // Today
     endDate: new Date().toISOString().split('T')[0]    // Today
   });
-  const [followUpLeadsData, setFollowUpLeadsData] = useState([]);
+  
+  // ✅ NEW: Store follow-up rows (not lead rows)
+  const [followUpRowsData, setFollowUpRowsData] = useState([]);
 
   // Get dynamic stages
   const stages = settingsData.stages.map(stage => ({
@@ -285,7 +294,7 @@ const FollowUpTable = ({ onLogout, user }) => {
   const handleSelectAllChange = (checked) => {
     setSelectAll(checked);
     if (checked) {
-      const allLeadIds = displayLeads.map(lead => lead.id);
+      const allLeadIds = displayLeads.map(row => row.leadData.id);
       setSelectedLeads(allLeadIds);
     } else {
       setSelectedLeads([]);
@@ -340,53 +349,150 @@ const FollowUpTable = ({ onLogout, user }) => {
     setShowDeleteDialog(false);
   };
 
-  // Handle Follow-up Status Update with refresh
-  const handleFollowUpStatusChange = async (e, followUpId, newStatus) => {
-    e.stopPropagation();
-    
+  // Fetch Latest Follow-up Comments
+  const fetchLatestFollowUpComments = async () => {
     try {
-      console.log('Updating follow-up status:', followUpId, newStatus);
+      const { data, error } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .select('record_id, description')
+        .eq('main_action', 'Follow-up Status Updated')
+        .order('action_timestamp', { ascending: false });
+
+      if (error) throw error;
+
+      const comments = {};
+      const seen = new Set();
+
+      data?.forEach(entry => {
+        const leadId = entry.record_id;
+        if (!seen.has(leadId)) {
+          const description = entry.description;
+          const commentMatch = description.match(/Comment:\s*"([^"]*)"/);
+          if (commentMatch) {
+            comments[leadId] = commentMatch[1];
+            seen.add(leadId);
+          }
+        }
+      });
+
+      setLatestFollowUpComments(comments);
+    } catch (error) {
+      console.error('Error fetching latest follow-up comments:', error);
+    }
+  };
+
+  // Open Follow-up Status Change Modal
+  const openFollowUpStatusModal = (e, followUpId, leadId, currentStatus) => {
+    e.stopPropagation();
+    setFollowUpStatusModal({
+      isOpen: true,
+      followUpId: followUpId,
+      leadId: leadId,
+      currentStatus: currentStatus,
+      selectedStatus: null,
+      comment: '',
+      error: ''
+    });
+  };
+
+  // Close Follow-up Status Modal
+  const closeFollowUpStatusModal = () => {
+    setFollowUpStatusModal({
+      isOpen: false,
+      followUpId: null,
+      leadId: null,
+      currentStatus: null,
+      selectedStatus: null,
+      comment: '',
+      error: ''
+    });
+  };
+
+  // Handle Follow-up Status Modal Submit
+  const handleFollowUpStatusModalSubmit = async () => {
+    if (!followUpStatusModal.comment.trim()) {
+      setFollowUpStatusModal(prev => ({
+        ...prev,
+        error: 'Please add a comment before submitting'
+      }));
+      return;
+    }
+
+    if (!followUpStatusModal.selectedStatus) {
+      setFollowUpStatusModal(prev => ({
+        ...prev,
+        error: 'Please select a status'
+      }));
+      return;
+    }
+
+    try {
+      console.log('Updating follow-up status:', followUpStatusModal.followUpId, followUpStatusModal.selectedStatus);
       
-      // Close dropdown immediately
-      setFollowUpStatusDropdownOpen(null);
-      
+      const oldStatus = followUpStatusModal.currentStatus;
+      const newStatus = followUpStatusModal.selectedStatus;
+
       // Update database
       const { error } = await supabase
         .from(TABLE_NAMES.FOLLOW_UPS)
         .update({ status: newStatus })
-        .eq('id', followUpId);
+        .eq('id', followUpStatusModal.followUpId);
 
       if (error) {
         console.error('Database update failed:', error);
-        alert('Failed to update status. Please try again.');
         throw error;
+      }
+
+      // Log to history with comment
+      const descriptionWithComment = `Follow-up status changed from "${oldStatus}" to "${newStatus}". Comment: "${followUpStatusModal.comment}". Current Status is "${newStatus}".`;
+      
+      const { error: logError } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .insert([{
+          main_action: 'Follow-up Status Updated',
+          description: descriptionWithComment,
+          table_name: TABLE_NAMES.FOLLOW_UPS,
+          record_id: followUpStatusModal.leadId.toString(),
+          action_timestamp: new Date().toISOString()
+        }]);
+
+      if (logError) {
+        console.error('Error logging follow-up status change:', logError);
       }
 
       console.log('✅ Follow-up status updated successfully');
       
-      // Refresh the entire data to recalculate which follow-up to show
+      // Update latest comments state
+      setLatestFollowUpComments(prev => ({
+        ...prev,
+        [followUpStatusModal.leadId]: followUpStatusModal.comment
+      }));
+
+      // Close modal
+      closeFollowUpStatusModal();
+      
+      // Refresh the entire data
       await fetchFollowUpLeads();
+      await fetchLatestFollowUpComments();
       
     } catch (error) {
       console.error('Error updating follow-up status:', error);
-      alert('Error updating follow-up status: ' + error.message);
+      setFollowUpStatusModal(prev => ({
+        ...prev,
+        error: 'Error updating status: ' + error.message
+      }));
     }
   };
 
-  // Toggle Follow-up Status Dropdown
-  const handleFollowUpStatusDropdownToggle = (e, followUpId) => {
-    e.stopPropagation();
-    setFollowUpStatusDropdownOpen(followUpStatusDropdownOpen === followUpId ? null : followUpId);
-  };
-
   // VIEW DETAILS FUNCTIONALITY
-  const handleViewDetails = (e, lead) => {
-    e.stopPropagation(); // Prevent opening sidebar
+  const handleViewDetails = (e, row) => {
+    e.stopPropagation();
     setSelectedFollowUpDetails({
-      lead: lead,
-      followUps: lead.followUps || [],
-      nextFollowUpDate: lead.nextFollowUpDate,
-      followUpDetails: lead.followUpDetails
+      lead: row.leadData,
+      followUps: row.allFollowUpsForLead || [],
+      nextFollowUpDate: row.followUpDate,
+      followUpDetails: row.followUpDetails,
+      latestComment: latestFollowUpComments[row.leadData.id] || null
     });
     setShowDetailsPopup(true);
   };
@@ -405,10 +511,14 @@ const FollowUpTable = ({ onLogout, user }) => {
   // Calculate stage counts
   const getStageCount = (stageName) => {
     const stageKey = getStageKeyFromName(stageName);
-    return followUpLeadsData.filter(lead => {
-      const leadStageKey = getStageKeyForLead(lead.stage);
-      return leadStageKey === stageKey || lead.stage === stageName;
-    }).length;
+    const uniqueLeads = new Set();
+    followUpRowsData.forEach(row => {
+      const leadStageKey = getStageKeyForLead(row.leadData.stage);
+      if (leadStageKey === stageKey || row.leadData.stage === stageName) {
+        uniqueLeads.add(row.leadData.id);
+      }
+    });
+    return uniqueLeads.size;
   };
 
   // Get stage color
@@ -445,7 +555,7 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // ✅ MAIN FETCH FUNCTION - FIXED
+  // ✅ MAIN FETCH FUNCTION - RECTIFIED TO SHOW ALL FOLLOW-UPS
   const fetchFollowUpLeads = async () => {
     try {
       setLoading(true);
@@ -470,7 +580,7 @@ const FollowUpTable = ({ onLogout, user }) => {
 
       if (!followUpsData || followUpsData.length === 0) {
         console.log('❌ No follow-ups found in database');
-        setFollowUpLeadsData([]);
+        setFollowUpRowsData([]);
         setLeadsData([]);
         setLoading(false);
         return;
@@ -491,7 +601,7 @@ const FollowUpTable = ({ onLogout, user }) => {
 
       if (filteredFollowUps.length === 0) {
         console.log('❌ No follow-ups in selected date range');
-        setFollowUpLeadsData([]);
+        setFollowUpRowsData([]);
         setLeadsData([]);
         setLoading(false);
         return;
@@ -528,7 +638,7 @@ const FollowUpTable = ({ onLogout, user }) => {
 
       if (!leadsResponse || leadsResponse.length === 0) {
         console.log('❌ No leads found after role filtering');
-        setFollowUpLeadsData([]);
+        setFollowUpRowsData([]);
         setLeadsData([]);
         setLoading(false);
         return;
@@ -543,64 +653,56 @@ const FollowUpTable = ({ onLogout, user }) => {
         console.error('Error fetching activity:', activityError);
       }
 
-      // Step 7: Convert leads with follow-up logic
-      const today = new Date().toISOString().split('T')[0];
-      console.log('📅 Today\'s date:', today);
-
-      const convertedData = await Promise.all(
-        leadsResponse.map(async (leadRecord) => {
-          const convertedLead = await convertDatabaseToUIWithCustomFields(leadRecord);
-          
-          // Get ALL follow-ups for this lead (for sidebar)
-          const allLeadFollowUps = followUpsData.filter(f => f.lead_id === leadRecord.id);
-          
-          // Get follow-ups in date range for this lead
-          const leadFollowUpsInRange = filteredFollowUps.filter(f => f.lead_id === leadRecord.id);
-          
-          // Sort by date
-          leadFollowUpsInRange.sort((a, b) => {
-            const dateA = a.follow_up_date.split('T')[0];
-            const dateB = b.follow_up_date.split('T')[0];
-            return dateA.localeCompare(dateB);
-          });
-          
-          // ✅ FIXED LOGIC: Prioritize upcoming follow-ups, but show past ones if no upcoming exist
-          let nextFollowUp;
-          
-          // First, try to find an upcoming follow-up (not done, today or future)
-          const upcomingFollowUp = leadFollowUpsInRange.find(f => 
-            f.status !== 'Done' && f.follow_up_date.split('T')[0] >= today
-          );
-          
-          if (upcomingFollowUp) {
-            nextFollowUp = upcomingFollowUp;
-          } else {
-            // If no upcoming follow-up, check for any "Not Done" follow-ups in range
-            const notDoneFollowUp = leadFollowUpsInRange.find(f => f.status !== 'Done');
-            
-            if (notDoneFollowUp) {
-              nextFollowUp = notDoneFollowUp;
-            } else {
-              // If all are done, show the earliest one in range
-              nextFollowUp = leadFollowUpsInRange[0];
-            }
-          }
-          
-          convertedLead.followUps = allLeadFollowUps;
-          convertedLead.nextFollowUpDate = nextFollowUp?.follow_up_date?.split('T')[0];
-          convertedLead.followUpDetails = nextFollowUp?.details;
-          convertedLead.followUpStatus = nextFollowUp?.status || 'Not Done';
-          convertedLead.nextFollowUpId = nextFollowUp?.id;
-          
-          return convertedLead;
-        })
-      );
+      // Step 7: ✅ CREATE ROWS FOR EACH FOLLOW-UP (NOT EACH LEAD)
+      const followUpRows = [];
       
-      console.log('✅ Converted leads:', convertedData.length);
+      for (const leadRecord of leadsResponse) {
+        const convertedLead = await convertDatabaseToUIWithCustomFields(leadRecord);
+        
+        // Get ALL follow-ups for this lead (for sidebar)
+        const allLeadFollowUps = followUpsData.filter(f => f.lead_id === leadRecord.id);
+        
+        // Get follow-ups in date range for this lead
+        const leadFollowUpsInRange = filteredFollowUps.filter(f => f.lead_id === leadRecord.id);
+        
+        // ✅ CREATE ONE ROW PER FOLLOW-UP IN DATE RANGE
+        for (const followUp of leadFollowUpsInRange) {
+          followUpRows.push({
+            // Unique row ID (combination of lead ID and follow-up ID)
+            rowId: `${leadRecord.id}-${followUp.id}`,
+            
+            // Lead data (same for all follow-ups of this lead)
+            leadData: convertedLead,
+            
+            // This specific follow-up's data
+            followUpId: followUp.id,
+            followUpDate: followUp.follow_up_date.split('T')[0],
+            followUpDetails: followUp.details,
+            followUpStatus: followUp.status || 'Not Done',
+            followUpCreatedAt: followUp.created_at,
+            
+            // All follow-ups for this lead (for sidebar)
+            allFollowUpsForLead: allLeadFollowUps
+          });
+        }
+      }
+      
+      // Sort rows by follow-up date
+      followUpRows.sort((a, b) => a.followUpDate.localeCompare(b.followUpDate));
+      
+      console.log('✅ Total follow-up rows created:', followUpRows.length);
       console.log('=== FOLLOW-UP LEADS FETCH COMPLETE ===');
       
-      setFollowUpLeadsData(convertedData);
-      setLeadsData(convertedData);
+      setFollowUpRowsData(followUpRows);
+      
+      // Also update leadsData with unique leads for other components
+      const uniqueLeadsMap = new Map();
+      followUpRows.forEach(row => {
+        if (!uniqueLeadsMap.has(row.leadData.id)) {
+          uniqueLeadsMap.set(row.leadData.id, row.leadData);
+        }
+      });
+      setLeadsData(Array.from(uniqueLeadsMap.values()));
       
       // Activity data
       if (activityResponse) {
@@ -610,6 +712,9 @@ const FollowUpTable = ({ onLogout, user }) => {
         });
         setLastActivityData(activityMap);
       }
+
+      // Fetch latest follow-up comments
+      await fetchLatestFollowUpComments();
       
     } catch (error) {
       console.error('❌ Error fetching follow-up leads:', error);
@@ -630,34 +735,6 @@ const FollowUpTable = ({ onLogout, user }) => {
       ...prev,
       [field]: value
     }));
-  };
-
-  // Helper functions for styling
-  const getStageClass = (stage) => {
-    const stageMap = {
-      "New Lead": "stage-new-lead",
-      "Connected": "stage-connected",
-      "Meeting Booked": "stage-meeting-booked",
-      "Meeting Done": "stage-meeting-done",
-      "Proposal Sent": "stage-proposal-sent",
-      "Visit Booked": "stage-visit-booked",
-      "Visit Done": "stage-visit-done",
-      "Registered": "stage-registered",
-      "Admission": "stage-admission",
-      "No Response": "stage-no-response"
-    };
-    return stageMap[stage] || "stage-new-lead";
-  };
-
-  const getCategoryClass = (category) => {
-    const categoryMap = {
-      "New": "status-new",
-      "Warm": "status-warm",
-      "Hot": "status-hot",
-      "Enrolled": "status-enrolled",
-      "Cold": "status-cold"
-    };
-    return categoryMap[category] || "status-new";
   };
 
   // Sidebar functions
@@ -686,81 +763,6 @@ const FollowUpTable = ({ onLogout, user }) => {
       ...prev,
       [field]: value
     }));
-  };
-
-  // Handle stage change from sidebar
-  const handleSidebarStageChange = async (leadId, newStageKey) => {
-    try {
-      const lead = followUpLeadsData.find(l => l.id === leadId);
-      const oldStageKey = lead.stage;
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
-      
-      const oldStageName = getStageDisplayName(oldStageKey);
-      const newStageName = getStageDisplayName(newStageKey);
-      
-      if (oldStageKey !== newStageKey) {
-        await logStageChange(leadId, oldStageName, newStageName, 'sidebar');
-      }
-
-      let updateData = { 
-        stage: newStageKey,
-        score: updatedScore, 
-        category: updatedCategory,
-        updated_at: new Date().toISOString()
-      };
-
-      const noResponseKey = getStageKeyFromName('No Response');
-      if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
-        updateData.previous_stage = oldStageKey;
-      }
-
-      if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
-        updateData.previous_stage = null;
-      }
-
-      const { error } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .update(updateData)
-        .eq('id', leadId);
-
-      if (error) {
-        throw error;
-      }
-
-      await fetchLastActivityData();
-
-      const updatedLeads = followUpLeadsData.map(lead => 
-        lead.id === leadId 
-          ? { 
-              ...lead, 
-              stage: newStageKey, 
-              stageDisplayName: newStageName,
-              score: updatedScore, 
-              category: updatedCategory 
-            }
-          : lead
-      );
-      
-      setFollowUpLeadsData(updatedLeads);
-      setLeadsData(updatedLeads);
-
-      if (selectedLead && selectedLead.id === leadId) {
-        setSelectedLead({
-          ...selectedLead,
-          stage: newStageKey,
-          stageDisplayName: newStageName,
-          score: updatedScore,
-          category: updatedCategory
-        });
-      }
-
-      alert('Stage updated successfully!');
-      
-    } catch (error) {
-      console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
-    }
   };
 
   // Handle update all fields function
@@ -806,15 +808,6 @@ const FollowUpTable = ({ onLogout, user }) => {
         updateData.visit_datetime = new Date(`${sidebarFormData.visitDate}T${sidebarFormData.visitTime}:00`).toISOString();
       }
 
-      const oldStageKey = selectedLead.stage;
-      const newStageKey = stageKey;
-      
-      if (oldStageKey !== newStageKey) {
-        const oldStageName = getStageDisplayName(oldStageKey);
-        const newStageName = getStageDisplayName(newStageKey);
-        await logStageChange(selectedLead.id, oldStageName, newStageName, 'sidebar edit all');
-      }
-
       const { error } = await supabase
         .from(TABLE_NAMES.LEADS)
         .update(updateData)
@@ -837,144 +830,67 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // Handle stage dropdown toggle
-  const handleStageDropdownToggle = (e, leadId) => {
-    e.stopPropagation();
-    setStageDropdownOpen(stageDropdownOpen === leadId ? null : leadId);
-  };
-
-  // Handle stage change from dropdown
-  const handleStageChangeFromDropdown = async (e, leadId, newStageKey) => {
-    e.stopPropagation();
-    
-    try {
-      const lead = followUpLeadsData.find(l => l.id === leadId);
-      const oldStageKey = lead.stage;
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
-      
-      const oldStageName = getStageDisplayName(oldStageKey);
-      const newStageName = getStageDisplayName(newStageKey);
-      
-      if (oldStageKey !== newStageKey) {
-        await logStageChange(leadId, oldStageName, newStageName, 'table dropdown');
-      }
-
-      let updateData = { 
-        stage: newStageKey,
-        score: updatedScore, 
-        category: updatedCategory,
-        updated_at: new Date().toISOString()
-      };
-
-      const noResponseKey = getStageKeyFromName('No Response');
-      if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
-        updateData.previous_stage = oldStageKey;
-      }
-
-      if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
-        updateData.previous_stage = null;
-      }
-
-      const { error } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .update(updateData)
-        .eq('id', leadId);
-
-      if (error) {
-        throw error;
-      }
-
-      await fetchLastActivityData();
-
-      const updatedLeads = followUpLeadsData.map(lead => 
-        lead.id === leadId 
-          ? { 
-              ...lead, 
-              stage: newStageKey, 
-              stageDisplayName: newStageName,
-              score: updatedScore, 
-              category: updatedCategory 
-            }
-          : lead
-      );
-      
-      setFollowUpLeadsData(updatedLeads);
-      setLeadsData(updatedLeads);
-      
-      setStageDropdownOpen(null);
-      
-    } catch (error) {
-      console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
-    }
-  };
-
-  // Close dropdowns when clicking elsewhere
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (stageDropdownOpen) {
-        setStageDropdownOpen(null);
-      }
-      if (followUpStatusDropdownOpen) {
-        setFollowUpStatusDropdownOpen(null);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [stageDropdownOpen, followUpStatusDropdownOpen]);
-
   // Search functionality
   const handleSearchChange = (e) => {
     const term = e.target.value;
     setSearchTerm(term);
-    
-    if (term.trim() === '') {
-      setFilteredLeads([]);
-    } else {
-      const filtered = followUpLeadsData.filter(lead => 
-        lead.parentsName.toLowerCase().includes(term.toLowerCase()) ||
-        lead.kidsName.toLowerCase().includes(term.toLowerCase()) ||
-        lead.phone.toLowerCase().includes(term.toLowerCase()) ||
-        getStageDisplayName(lead.stage).toLowerCase().includes(term.toLowerCase()) ||
-        lead.counsellor.toLowerCase().includes(term.toLowerCase()) ||
-        (lead.email && lead.email.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.occupation && lead.occupation.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.location && lead.location.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.currentSchool && lead.currentSchool.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.source && lead.source.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.followUpDetails && lead.followUpDetails.toLowerCase().includes(term.toLowerCase()))
-      );
-      setFilteredLeads(filtered);
-    }
   };
 
   // Determine which data to display
   const getDisplayLeads = () => {
-    let filtered = followUpLeadsData;
+    let filtered = followUpRowsData;
     
     // Apply search first
     if (searchTerm.trim() !== '') {
-      filtered = filtered.filter(lead => 
-        lead.parentsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.kidsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStageDisplayName(lead.stage).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.counsellor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.occupation && lead.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.location && lead.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.currentSchool && lead.currentSchool.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.followUpDetails && lead.followUpDetails.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
+      filtered = filtered.filter(row => {
+        const lead = row.leadData;
+        return (
+          lead.parentsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          lead.kidsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          getStageDisplayName(lead.stage).toLowerCase().includes(searchTerm.toLowerCase()) ||
+          lead.counsellor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (lead.occupation && lead.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (lead.location && lead.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (lead.currentSchool && lead.currentSchool.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (row.followUpDetails && row.followUpDetails.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+      });
     }
     
-    // Then apply filters
-    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, getStageDisplayName, getStageKeyFromName);
+    // Then apply filters on the lead data
+    if (counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0) {
+      filtered = filtered.filter(row => {
+        const lead = row.leadData;
+        
+        // Counsellor filter
+        if (counsellorFilters.length > 0 && !counsellorFilters.includes(lead.counsellor)) {
+          return false;
+        }
+        
+        // Stage filter
+        if (stageFilters.length > 0) {
+          const leadStageKey = getStageKeyForLead(lead.stage);
+          const leadStageDisplay = getStageDisplayName(lead.stage);
+          const matchesStage = stageFilters.some(filterStage => {
+            const filterStageKey = getStageKeyFromName(filterStage);
+            return leadStageKey === filterStageKey || leadStageDisplay === filterStage;
+          });
+          if (!matchesStage) return false;
+        }
+        
+        // Status filter
+        if (statusFilters.length > 0 && !statusFilters.includes(lead.category)) {
+          return false;
+        }
+        
+        return true;
+      });
+    }
+    
+    return filtered;
   };
 
   const displayLeads = getDisplayLeads();
@@ -1078,7 +994,7 @@ const FollowUpTable = ({ onLogout, user }) => {
             </div>
 
             <span className="total-count">
-              Follow-ups Found: {followUpLeadsData.length}
+              Follow-ups Found: {followUpRowsData.length}
             </span>
             
             {/* DELETE BUTTON */}
@@ -1181,130 +1097,83 @@ const FollowUpTable = ({ onLogout, user }) => {
             </thead>
             <tbody>
               {!loading && displayLeads.length > 0 ? (
-                displayLeads.map(lead => (
+                displayLeads.map(row => (
                   <tr 
-                    key={lead.id} 
-                    onClick={() => openSidebar(lead)} 
+                    key={row.rowId}
+                    onClick={() => openSidebar(row.leadData)} 
                     className="table-row mobile-tap-row"
                   >
                     <td>
                       <input 
                         type="checkbox" 
-                        checked={selectedLeads.includes(lead.id)}
-                        onChange={(e) => handleIndividualCheckboxChange(lead.id, e.target.checked)}
+                        checked={selectedLeads.includes(row.leadData.id)}
+                        onChange={(e) => handleIndividualCheckboxChange(row.leadData.id, e.target.checked)}
                         onClick={(e) => e.stopPropagation()} 
                       />
                     </td>
                     <td>
                       <div className="id-info">
-                        <div className="lead-id">{lead.id}</div>
-                        <div className="created-date">{new Date(lead.createdTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                        <div className="lead-id">{row.leadData.id}</div>
+                        <div className="created-date">{new Date(row.leadData.createdTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                       </div>
                     </td>
                     <td>
                       <div className="parent-info">
-                        <div className="parent-name">{lead.parentsName}</div>
-                        <div className="kid-name">{lead.kidsName}</div>
+                        <div className="parent-name">{row.leadData.parentsName}</div>
+                        <div className="kid-name">{row.leadData.kidsName}</div>
                       </div>
                     </td>
-                    <td>{formatPhoneForMobile(lead.phone)}</td>
-                    <td className="desktop-only">{lead.grade}</td>
+                    <td>{formatPhoneForMobile(row.leadData.phone)}</td>
+                    <td className="desktop-only">{row.leadData.grade}</td>
+                    
+                    {/* STAGE - DISPLAY ONLY (NO DROPDOWN) */}
                     <td>
-                      <div className="stage-dropdown-container">
-                        <div 
-                          className="stage-badge stage-dropdown-trigger" 
-                          style={{ 
-                            backgroundColor: getStageColorFromSettings(lead.stage), 
-                            color: '#333'
-                          }}
-                          onClick={(e) => handleStageDropdownToggle(e, lead.id)}
-                        >
-                          <span>{getStageDisplayName(lead.stage)}</span>
-                          <ChevronDown 
-                            size={14} 
-                            className={`chevron ${stageDropdownOpen === lead.id ? 'open' : ''}`}
-                          />
-                        </div>
-                        
-                        {/* Dynamic Stage Dropdown */}
-                        {stageDropdownOpen === lead.id && (
-                          <div className="stage-dropdown-menu">
-                            {stages.map((stage, index) => (
-                              <div
-                                key={stage.value}
-                                className="stage-dropdown-item"
-                                onClick={(e) => handleStageChangeFromDropdown(e, lead.id, stage.value)}
-                              >
-                                <span 
-                                  className="stage-color-dot"
-                                  style={{ backgroundColor: stage.color }}
-                                ></span>
-                                <span className="stage-name">{stage.label}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                      <div 
+                        className="stage-badge" 
+                        style={{ 
+                          backgroundColor: getStageColorFromSettings(row.leadData.stage), 
+                          color: '#333',
+                          cursor: 'default'
+                        }}
+                      >
+                        <span>{getStageDisplayName(row.leadData.stage)}</span>
                       </div>
                     </td>
                     
                     <td className="desktop-only">
                       <span className="status-badge-text">
-                        {lead.category}
+                        {row.leadData.category}
                       </span>
                     </td>
                     <td className="counsellor-middle">
                       <div className="counsellor-avatar">
-                        {getCounsellorInitials(lead.counsellor)}
+                        {getCounsellorInitials(row.leadData.counsellor)}
                       </div>
                     </td>
                     <td>
                       <div className="follow-up-info">
                         <div className="follow-up-date">
-                          {formatDateForDisplay(lead.nextFollowUpDate)}
+                          {formatDateForDisplay(row.followUpDate)}
                         </div>
                       </div>
                     </td>
                     
-                    {/* Follow-up Status Dropdown Column */}
+                    {/* FOLLOW-UP STATUS - OPENS MODAL */}
                     <td onClick={(e) => e.stopPropagation()}>
-                      <div className="followup-status-dropdown-container">
-                        <div 
-                          className={`followup-status-badge ${lead.followUpStatus === 'Done' ? 'done' : 'not-done'}`}
-                          onClick={(e) => handleFollowUpStatusDropdownToggle(e, lead.nextFollowUpId)}
-                        >
-                          <span>{lead.followUpStatus || 'Not Done'}</span>
-                          <ChevronDown 
-                            size={12} 
-                            className={`chevron ${followUpStatusDropdownOpen === lead.nextFollowUpId ? 'open' : ''}`}
-                          />
-                        </div>
-                        
-                        {/* Follow-up Status Dropdown Menu */}
-                        {followUpStatusDropdownOpen === lead.nextFollowUpId && (
-                          <div className="followup-status-dropdown-menu">
-                            <div
-                              className="followup-status-dropdown-item"
-                              onClick={(e) => handleFollowUpStatusChange(e, lead.nextFollowUpId, 'Done')}
-                            >
-                              <CheckCircle size={14} className="status-icon done" />
-                              <span>Done</span>
-                            </div>
-                            <div
-                              className="followup-status-dropdown-item"
-                              onClick={(e) => handleFollowUpStatusChange(e, lead.nextFollowUpId, 'Not Done')}
-                            >
-                              <Clock size={14} className="status-icon not-done" />
-                              <span>Not Done</span>
-                            </div>
-                          </div>
-                        )}
+                      <div 
+                        className={`followup-status-badge ${row.followUpStatus === 'Done' ? 'done' : 'not-done'}`}
+                        onClick={(e) => openFollowUpStatusModal(e, row.followUpId, row.leadData.id, row.followUpStatus)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <span>{row.followUpStatus || 'Not Done'}</span>
+                        <Edit2 size={12} style={{ marginLeft: '4px' }} />
                       </div>
                     </td>
                     
                     <td className="counsellor-middle">
                       <button
                         className="view-details-btn"
-                        onClick={(e) => handleViewDetails(e, lead)}
+                        onClick={(e) => handleViewDetails(e, row)}
                       >
                         <Eye size={14} />
                         View
@@ -1328,6 +1197,78 @@ const FollowUpTable = ({ onLogout, user }) => {
         </div>
       </div>
 
+      {/* FOLLOW-UP STATUS CHANGE MODAL */}
+      {followUpStatusModal.isOpen && (
+        <div className="stage-modal-overlay" onClick={closeFollowUpStatusModal}>
+          <div className="stage-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="stage-modal-header">
+              <h3>Change Follow-up Status</h3>
+              <button 
+                className="stage-modal-close-btn" 
+                onClick={closeFollowUpStatusModal}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="stage-modal-body">
+              <div className="stage-modal-form-group">
+                <label className="stage-modal-label">Select New Status</label>
+                <select
+                  value={followUpStatusModal.selectedStatus || ''}
+                  onChange={(e) => setFollowUpStatusModal(prev => ({
+                    ...prev,
+                    selectedStatus: e.target.value,
+                    error: ''
+                  }))}
+                  className="stage-modal-select"
+                >
+                  <option value="">-- Select Status --</option>
+                  <option value="Done">Done</option>
+                  <option value="Not Done">Not Done</option>
+                </select>
+              </div>
+
+              <div className="stage-modal-form-group">
+                <label className="stage-modal-label">Comment (Required)</label>
+                <textarea
+                  value={followUpStatusModal.comment}
+                  onChange={(e) => setFollowUpStatusModal(prev => ({
+                    ...prev,
+                    comment: e.target.value,
+                    error: ''
+                  }))}
+                  placeholder="Enter reason for status change..."
+                  className="stage-modal-textarea"
+                  rows="4"
+                />
+              </div>
+
+              {followUpStatusModal.error && (
+                <div className="stage-modal-error">
+                  {followUpStatusModal.error}
+                </div>
+              )}
+            </div>
+
+            <div className="stage-modal-footer">
+              <button 
+                className="stage-modal-cancel-btn" 
+                onClick={closeFollowUpStatusModal}
+              >
+                Cancel
+              </button>
+              <button 
+                className="stage-modal-submit-btn" 
+                onClick={handleFollowUpStatusModalSubmit}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lead Sidebar Component */}
       <LeadSidebar
         key={selectedLead?.id}
@@ -1341,7 +1282,6 @@ const FollowUpTable = ({ onLogout, user }) => {
         onEditModeToggle={handleEditModeToggle}
         onFieldChange={handleSidebarFieldChange}
         onUpdateAllFields={handleUpdateAllFields}
-        onStageChange={handleSidebarStageChange}
         onRefreshActivityData={fetchLastActivityData}
         getStageColor={getStageColorFromSettings}
         getCounsellorInitials={getCounsellorInitials}
@@ -1349,7 +1289,7 @@ const FollowUpTable = ({ onLogout, user }) => {
         getCategoryFromStage={getStageCategory}
       />
 
-      {/* Follow-up Details Popup */}
+      {/* FOLLOW-UP DETAILS POPUP - WITH LATEST COMMENT */}
       {showDetailsPopup && selectedFollowUpDetails && (
         <div className="popup-overlay" onClick={closeDetailsPopup}>
           <div className="popup-content" onClick={(e) => e.stopPropagation()}>
@@ -1383,6 +1323,19 @@ const FollowUpTable = ({ onLogout, user }) => {
               </div>
             </div>
 
+            {/* LATEST COMMENT SECTION */}
+            {selectedFollowUpDetails.latestComment && (
+              <div className="latest-comment-section">
+                <h4 className="latest-comment-title">
+                  <FileText size={16} />
+                  Latest Comment
+                </h4>
+                <div className="latest-comment-box">
+                  {selectedFollowUpDetails.latestComment}
+                </div>
+              </div>
+            )}
+
             {/* Follow-up List */}
             <div>
               <h4 className="followup-schedule-title">
@@ -1395,7 +1348,7 @@ const FollowUpTable = ({ onLogout, user }) => {
                   {selectedFollowUpDetails.followUps.map((followUp, index) => (
                     <div 
                       key={index}
-                      className={`followup-item ${index === 0 ? 'next' : ''} ${followUp.status === 'Done' ? 'followup-done' : ''}`}
+                      className={`followup-item ${followUp.status === 'Done' ? 'followup-done' : ''}`}
                     >
                       <div className="followup-item-header">
                         <div className="followup-date">
@@ -1403,9 +1356,6 @@ const FollowUpTable = ({ onLogout, user }) => {
                           {formatFullDate(followUp.follow_up_date)}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          {index === 0 && (
-                            <span className="followup-next-badge">Next</span>
-                          )}
                           {followUp.status === 'Done' && (
                             <span className="followup-done-badge">
                               <CheckCircle size={12} /> Done
@@ -1446,7 +1396,7 @@ const FollowUpTable = ({ onLogout, user }) => {
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
         selectedLeads={selectedLeads}
-        leadsData={followUpLeadsData}
+        leadsData={Array.from(new Set(followUpRowsData.map(r => r.leadData)))}
       />
     </div>
   );
