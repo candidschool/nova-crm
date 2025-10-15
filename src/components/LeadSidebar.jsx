@@ -952,7 +952,7 @@ const formatHistoryDescription = (description) => {
                 className={`lead-sidebar-tab-button ${activeTab === 'history' ? 'active' : ''}`}
               >
                 <FileText size={isMobile ? 18 : 16} /> 
-                {isMobile ? 'History' : 'History'}
+                {isMobile ? 'Comment' : 'Comment'}
               </button>
             </div>
           </div>
