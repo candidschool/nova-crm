@@ -31,8 +31,9 @@ const InfoTab = ({
   const sources = settingsData?.sources?.map(source => source.name) || ['Instagram'];
   const grades = settingsData?.grades?.map(grade => grade.name) || ['LKG'];
 
-  const hasDateTimePassed = (date, time) => {
+ const hasDateTimePassed = (date, time) => {
     if (!date || !time || date === '' || time === '') {
+      console.log('hasDateTimePassed: Missing date or time', { date, time });
       return false;
     }
     
@@ -40,7 +41,16 @@ const InfoTab = ({
     const dateTime = new Date(dateTimeString);
     const now = new Date();
     
-    return now > dateTime;
+    const isPassed = now > dateTime;
+    
+    console.log('=== DATE TIME CHECK ===');
+    console.log('Date string:', dateTimeString);
+    console.log('Parsed datetime:', dateTime.toString());
+    console.log('Current time:', now.toString());
+    console.log('Is passed?', isPassed);
+    console.log('Time difference (ms):', now.getTime() - dateTime.getTime());
+    
+    return isPassed;
   };
 
   useEffect(() => {
@@ -51,45 +61,60 @@ const InfoTab = ({
   }, [selectedLead?.id]);
 
   useEffect(() => {
-    if (!selectedLead || isEditingMode) return;
+    if (!selectedLead) return;
     
-    console.log('=== CONFIRMATION CHECK (Once per lead) ===');
-    console.log('Selected Lead ID:', selectedLead.id);
-    console.log('Lead meeting_confirmed from DB:', selectedLead.meeting_confirmed);
-    console.log('Lead visit_confirmed from DB:', selectedLead.visit_confirmed);
+    console.log('=== CONFIRMATION CHECK ===');
+    console.log('isEditingMode:', isEditingMode);
     
+    // MEETING CHECK
     const meetingDate = sidebarFormData.meetingDate || selectedLead.meetingDate;
     const meetingTime = sidebarFormData.meetingTime || selectedLead.meetingTime;
     
+    console.log('Meeting Date:', meetingDate, 'Meeting Time:', meetingTime);
+    
     const hasMeetingPassed = hasDateTimePassed(meetingDate, meetingTime);
+    const meetingAlreadyConfirmed = selectedLead.meeting_confirmed === 'Yes';
     
-    console.log('Meeting Date:', meetingDate);
-    console.log('Meeting Time:', meetingTime);
-    console.log('Has meeting passed?', hasMeetingPassed);
+    console.log('hasMeetingPassed:', hasMeetingPassed, 'meetingAlreadyConfirmed:', meetingAlreadyConfirmed, 'showMeetingConfirmation:', showMeetingConfirmation);
     
-    const meetingAlreadyConfirmed = selectedLead.meeting_confirmed && selectedLead.meeting_confirmed !== '';
-    
-    if (hasMeetingPassed && !showMeetingConfirmation && !meetingAlreadyConfirmed) {
-      console.log('Showing meeting confirmation');
+    if (hasMeetingPassed && !meetingAlreadyConfirmed && !isEditingMode) {
+      console.log('✓ SHOWING MEETING CONFIRMATION');
       setShowMeetingConfirmation(true);
+    } else if (!hasMeetingPassed || meetingAlreadyConfirmed || isEditingMode) {
+      setShowMeetingConfirmation(false);
     }
     
+    // VISIT CHECK
     const visitDate = sidebarFormData.visitDate || selectedLead.visitDate;
     const visitTime = sidebarFormData.visitTime || selectedLead.visitTime;
     
+    console.log('Visit Date:', visitDate, 'Visit Time:', visitTime);
+    
     const hasVisitPassed = hasDateTimePassed(visitDate, visitTime);
+    const visitAlreadyConfirmed = selectedLead.visit_confirmed === 'Yes';
     
-    console.log('Visit Date:', visitDate);
-    console.log('Visit Time:', visitTime);
-    console.log('Has visit passed?', hasVisitPassed);
+    console.log('hasVisitPassed:', hasVisitPassed, 'visitAlreadyConfirmed:', visitAlreadyConfirmed, 'showVisitConfirmation:', showVisitConfirmation);
     
-    const visitAlreadyConfirmed = selectedLead.visit_confirmed && selectedLead.visit_confirmed !== '';
-    
-    if (hasVisitPassed && !showVisitConfirmation && !visitAlreadyConfirmed) {
-      console.log('Showing visit confirmation');
+    if (hasVisitPassed && !visitAlreadyConfirmed && !isEditingMode) {
+      console.log('✓ SHOWING VISIT CONFIRMATION');
       setShowVisitConfirmation(true);
+    } else if (!hasVisitPassed || visitAlreadyConfirmed || isEditingMode) {
+      setShowVisitConfirmation(false);
     }
-  }, [selectedLead?.id, selectedLead?.meeting_confirmed, selectedLead?.visit_confirmed]);
+  }, [
+    selectedLead?.id,
+    selectedLead?.meetingDate,
+    selectedLead?.meetingTime,
+    selectedLead?.meeting_confirmed,
+    selectedLead?.visitDate,
+    selectedLead?.visitTime,
+    selectedLead?.visit_confirmed,
+    sidebarFormData.meetingDate,
+    sidebarFormData.meetingTime,
+    sidebarFormData.visitDate,
+    sidebarFormData.visitTime,
+    isEditingMode
+  ]);
 
   const handleMeetingConfirmation = async (didHappen) => {
     if (didHappen) {
