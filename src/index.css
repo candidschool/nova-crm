@@ -6058,3 +6058,140 @@
   background-color: white;
   border-radius: 4px;
 }
+
+/* 🆕 AUTO-RESCHEDULE STYLES */
+
+/* Header reschedule indicator */
+.reschedule-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: #FEF3C7;
+  color: #92400E;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 12px;
+}
+
+.reschedule-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: #D1FAE5;
+  color: #065F46;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 12px;
+}
+
+/* Table reschedule badges */
+.follow-up-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reschedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background-color: #FEF3C7;
+  color: #92400E;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  width: fit-content;
+}
+
+.max-reschedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background-color: #FEE2E2;
+  color: #991B1B;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+/* Popup reschedule badges */
+.followup-reschedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background-color: #FEF3C7;
+  color: #92400E;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.followup-max-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background-color: #FEE2E2;
+  color: #991B1B;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Sidebar reschedule badges */
+.sidebar-reschedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background-color: #FEF3C7;
+  color: #92400E;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.sidebar-max-reschedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  background-color: #FEE2E2;
+  color: #991B1B;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* Max reschedule item styling */
+.lead-sidebar-follow-up-item.max-reschedule {
+  border-left: 3px solid #FEE2E2;
+  background-color: #FEF2F2;
+}
+
+.followup-item.max-reschedule {
+  border-left: 3px solid #FEE2E2;
+  background-color: #FEF2F2;
+}
+
+/* Spin animation for refresh icon */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
