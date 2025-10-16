@@ -33,7 +33,8 @@ import {
   Trash2,
   CalendarDays,
   Eye,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 
 const FollowUpTable = ({ onLogout, user }) => {
@@ -137,8 +138,12 @@ const FollowUpTable = ({ onLogout, user }) => {
     endDate: new Date().toISOString().split('T')[0]    // Today
   });
   
-  // ✅ NEW: Store follow-up rows (not lead rows)
+  // Store follow-up rows (not lead rows)
   const [followUpRowsData, setFollowUpRowsData] = useState([]);
+
+  // 🆕 AUTO-RESCHEDULE STATE
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduledCount, setRescheduledCount] = useState(0);
 
   // Get dynamic stages
   const stages = settingsData.stages.map(stage => ({
@@ -381,6 +386,94 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
+  // 🆕 AUTO-RESCHEDULE OVERDUE FOLLOW-UPS TO NEXT DAY
+  const autoRescheduleOverdueFollowUps = async () => {
+    console.log('=== AUTO-RESCHEDULE CHECK START ===');
+    setIsRescheduling(true);
+    setRescheduledCount(0);
+
+    try {
+      // Get today's date in local timezone
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayString = `${year}-${month}-${day}`;
+
+      console.log('Today (local):', todayString);
+
+      // Find all overdue follow-ups (status = "Not Done" OR null, and date < today)
+      const { data: overdueFollowUps, error: fetchError } = await supabase
+        .from(TABLE_NAMES.FOLLOW_UPS)
+        .select('id, lead_id, follow_up_date, status')
+        .or('status.eq.Not Done,status.is.null')
+        .lt('follow_up_date', todayString);
+
+      if (fetchError) {
+        console.error('Error fetching overdue follow-ups:', fetchError);
+        throw fetchError;
+      }
+
+      console.log(`Found ${overdueFollowUps?.length || 0} overdue follow-ups to reschedule`);
+      
+      if (overdueFollowUps && overdueFollowUps.length > 0) {
+        console.log('Overdue follow-ups:', overdueFollowUps);
+      }
+
+      if (!overdueFollowUps || overdueFollowUps.length === 0) {
+        console.log('✅ No follow-ups need rescheduling');
+        setIsRescheduling(false);
+        return;
+      }
+
+      // Reschedule each follow-up to THE NEXT DAY (original date + 1 day)
+      let successCount = 0;
+      for (const followUp of overdueFollowUps) {
+        try {
+          // Get the current follow-up date
+          const currentDate = new Date(followUp.follow_up_date + 'T00:00:00');
+          
+          // Add 1 day to it
+          const nextDay = new Date(currentDate);
+          nextDay.setDate(nextDay.getDate() + 1);
+          
+          // Format as YYYY-MM-DD
+          const nextDayYear = nextDay.getFullYear();
+          const nextDayMonth = String(nextDay.getMonth() + 1).padStart(2, '0');
+          const nextDayDay = String(nextDay.getDate()).padStart(2, '0');
+          const nextDayString = `${nextDayYear}-${nextDayMonth}-${nextDayDay}`;
+
+          console.log(`Rescheduling follow-up ${followUp.id}: ${followUp.follow_up_date} → ${nextDayString}`);
+
+          // Update follow-up with next day's date
+          const { error: updateError } = await supabase
+            .from(TABLE_NAMES.FOLLOW_UPS)
+            .update({
+              follow_up_date: nextDayString
+            })
+            .eq('id', followUp.id);
+
+          if (updateError) {
+            console.error(`❌ Error rescheduling follow-up ${followUp.id}:`, updateError);
+          } else {
+            successCount++;
+            console.log(`✅ Successfully rescheduled follow-up ${followUp.id}: ${followUp.follow_up_date} → ${nextDayString}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing follow-up ${followUp.id}:`, error);
+        }
+      }
+
+      setRescheduledCount(successCount);
+      console.log(`=== AUTO-RESCHEDULE COMPLETE: ${successCount}/${overdueFollowUps.length} rescheduled ===`);
+
+    } catch (error) {
+      console.error('❌ Error in auto-reschedule:', error);
+    } finally {
+      setIsRescheduling(false);
+    }
+  };
+
   // Open Follow-up Status Change Modal
   const openFollowUpStatusModal = (e, followUpId, leadId, currentStatus) => {
     e.stopPropagation();
@@ -485,14 +578,37 @@ const FollowUpTable = ({ onLogout, user }) => {
   };
 
   // VIEW DETAILS FUNCTIONALITY
-  const handleViewDetails = (e, row) => {
+  const handleViewDetails = async (e, row) => {
     e.stopPropagation();
+    
+    // Fetch the latest comment for this lead
+    let latestComment = null;
+    try {
+      const { data, error } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .select('description')
+        .eq('main_action', 'Follow-up Status Updated')
+        .eq('record_id', row.leadData.id.toString())
+        .order('action_timestamp', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        const description = data[0].description;
+        const commentMatch = description.match(/Comment:\s*"([^"]*)"/);
+        if (commentMatch) {
+          latestComment = commentMatch[1];
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching latest comment:', error);
+    }
+    
     setSelectedFollowUpDetails({
       lead: row.leadData,
       followUps: row.allFollowUpsForLead || [],
       nextFollowUpDate: row.followUpDate,
       followUpDetails: row.followUpDetails,
-      latestComment: latestFollowUpComments[row.leadData.id] || null
+      latestComment: latestComment
     });
     setShowDetailsPopup(true);
   };
@@ -555,7 +671,7 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // ✅ MAIN FETCH FUNCTION - RECTIFIED TO SHOW ALL FOLLOW-UPS
+  // MAIN FETCH FUNCTION
   const fetchFollowUpLeads = async () => {
     try {
       setLoading(true);
@@ -653,7 +769,7 @@ const FollowUpTable = ({ onLogout, user }) => {
         console.error('Error fetching activity:', activityError);
       }
 
-      // Step 7: ✅ CREATE ROWS FOR EACH FOLLOW-UP (NOT EACH LEAD)
+      // Step 7: CREATE ROWS FOR EACH FOLLOW-UP
       const followUpRows = [];
       
       for (const leadRecord of leadsResponse) {
@@ -665,7 +781,7 @@ const FollowUpTable = ({ onLogout, user }) => {
         // Get follow-ups in date range for this lead
         const leadFollowUpsInRange = filteredFollowUps.filter(f => f.lead_id === leadRecord.id);
         
-        // ✅ CREATE ONE ROW PER FOLLOW-UP IN DATE RANGE
+        // CREATE ONE ROW PER FOLLOW-UP IN DATE RANGE
         for (const followUp of leadFollowUpsInRange) {
           followUpRows.push({
             // Unique row ID (combination of lead ID and follow-up ID)
@@ -724,9 +840,17 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // Fetch leads on component mount and when date range changes
+  // 🆕 Fetch leads and auto-reschedule on mount and date range change
   useEffect(() => {
-    fetchFollowUpLeads();
+    const loadData = async () => {
+      // First, auto-reschedule overdue follow-ups
+      await autoRescheduleOverdueFollowUps();
+      
+      // Then fetch the updated data
+      await fetchFollowUpLeads();
+    };
+    
+    loadData();
   }, [dateRange.startDate, dateRange.endDate]);
 
   // Handle date range change
@@ -996,6 +1120,20 @@ const FollowUpTable = ({ onLogout, user }) => {
             <span className="total-count">
               Follow-ups Found: {followUpRowsData.length}
             </span>
+            
+            {/* 🆕 RESCHEDULE INDICATOR */}
+            {isRescheduling && (
+              <span className="reschedule-indicator">
+                <RefreshCw size={14} className="animate-spin" />
+                Auto-rescheduling...
+              </span>
+            )}
+            
+            {rescheduledCount > 0 && !isRescheduling && (
+              <span className="reschedule-success">
+                ✓ {rescheduledCount} follow-up{rescheduledCount > 1 ? 's' : ''} auto-rescheduled
+              </span>
+            )}
             
             {/* DELETE BUTTON */}
             {selectedLeads.length > 0 && (
