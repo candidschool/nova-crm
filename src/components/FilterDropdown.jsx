@@ -1,23 +1,23 @@
 // FilterDropdown.jsx - Reusable Component with Two-Level Dropdown
 import React, { useState } from 'react';
-import { X, Filter, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
+import { X, Filter, ChevronDown, ChevronRight } from 'lucide-react';
 
 const FilterDropdown = ({ 
   isOpen, 
   onClose, 
   counsellorFilters, 
   stageFilters, 
-  statusFilters = [], // Status filter
-  alertFilter = false, // NEW: Alert filter
+  statusFilters = [],
+  sourceFilters = [], // Source filter
   setCounsellorFilters, 
   setStageFilters, 
-  setStatusFilters, // Status filter setter
-  setAlertFilter, // NEW: Alert filter setter
+  setStatusFilters,
+  setSourceFilters, // Source filter setter
   onClearAll,
-  settingsData, // Receive settings data
-  getFieldLabel, // NEW: Receive getFieldLabel function
-  getStageKeyFromName, // NEW: Stage conversion function
-  getStageDisplayName // NEW: Stage conversion function
+  settingsData,
+  getFieldLabel,
+  getStageKeyFromName,
+  getStageDisplayName
 }) => {
   const [expandedSection, setExpandedSection] = useState(null);
 
@@ -29,6 +29,9 @@ const FilterDropdown = ({
 
   // Get dynamic statuses from settings (unique stage statuses)
   const statuses = [...new Set(settingsData?.stages?.map(stage => stage.status).filter(Boolean))] || ['New'];
+
+  // Get dynamic sources from settings
+  const sources = settingsData?.sources?.map(source => source.name) || ['Instagram'];
 
   const handleCounsellorChange = (counsellor) => {
     if (counsellorFilters.includes(counsellor)) {
@@ -55,9 +58,13 @@ const FilterDropdown = ({
     }
   };
 
-  // NEW: Handle alert filter change
-  const handleAlertChange = () => {
-    setAlertFilter(!alertFilter);
+  // Handle source filtering
+  const handleSourceChange = (source) => {
+    if (sourceFilters.includes(source)) {
+      setSourceFilters(sourceFilters.filter(s => s !== source));
+    } else {
+      setSourceFilters([...sourceFilters, source]);
+    }
   };
 
   const toggleSection = (section) => {
@@ -69,7 +76,7 @@ const FilterDropdown = ({
       case 'counsellor': return counsellorFilters.length;
       case 'stage': return stageFilters.length;
       case 'status': return statusFilters.length;
-      case 'alert': return alertFilter ? 1 : 0; // NEW: Alert filter count
+      case 'source': return sourceFilters.length;
       default: return 0;
     }
   };
@@ -237,9 +244,9 @@ const FilterDropdown = ({
             
             {expandedSection === 'stage' && (
               <div style={{ paddingTop: '12px' }}>
-                {stages.map(stageName => (
+                {stages.map(stage => (
                   <label 
-                    key={stageName}
+                    key={stage}
                     style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
@@ -250,11 +257,11 @@ const FilterDropdown = ({
                   >
                     <input
                       type="checkbox"
-                      checked={stageFilters.includes(stageName)}
-                      onChange={() => handleStageChange(stageName)}
+                      checked={stageFilters.includes(stage)}
+                      onChange={() => handleStageChange(stage)}
                       style={{ marginRight: '8px' }}
                     />
-                    {stageName}
+                    {stage}
                   </label>
                 ))}
               </div>
@@ -322,65 +329,67 @@ const FilterDropdown = ({
             )}
           </div>
 
-          {/* NEW: Alert Filter Section */}
+          {/* Source Filter Section */}
           <div style={{ marginBottom: '20px' }}>
-            <div style={{
-              padding: '8px 0',
-              borderBottom: '1px solid #f3f4f6'
-            }}>
+            <div 
+              onClick={() => toggleSection('source')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                padding: '8px 0',
+                borderBottom: '1px solid #f3f4f6'
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ fontSize: '14px', fontWeight: '600' }}>Alert</span>
-                {getFilterCount('alert') > 0 && (
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>
+                  {getFieldLabel ? getFieldLabel('source') : 'Source'}
+                </span>
+                {getFilterCount('source') > 0 && (
                   <span style={{
                     marginLeft: '8px',
-                    backgroundColor: '#ef4444',
+                    backgroundColor: '#3b82f6',
                     color: 'white',
                     borderRadius: '10px',
                     padding: '2px 6px',
                     fontSize: '11px',
                     fontWeight: '600'
                   }}>
-                    ON
+                    {getFilterCount('source')}
                   </span>
                 )}
               </div>
+              {expandedSection === 'source' ? 
+                <ChevronDown size={16} /> : 
+                <ChevronRight size={16} />
+              }
             </div>
             
-            <div style={{ paddingTop: '12px' }}>
-              <label 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  padding: '8px 12px',
-                  backgroundColor: alertFilter ? '#fef2f2' : 'transparent',
-                  borderRadius: '6px',
-                  border: alertFilter ? '1px solid #fecaca' : '1px solid transparent',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={alertFilter}
-                  onChange={handleAlertChange}
-                  style={{ marginRight: '8px' }}
-                />
-                <AlertCircle size={16} style={{ marginRight: '8px', color: '#ef4444' }} />
-                <span>Show only leads with alerts (3+ days)</span>
-              </label>
-              {alertFilter && (
-                <div style={{
-                  marginTop: '8px',
-                  fontSize: '12px',
-                  color: '#6b7280',
-                  fontStyle: 'italic',
-                  paddingLeft: '12px'
-                }}>
-                  Sorted by highest alert days first
-                </div>
-              )}
-            </div>
+            {expandedSection === 'source' && (
+              <div style={{ paddingTop: '12px' }}>
+                {sources.map(source => (
+                  <label 
+                    key={source}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      marginBottom: '8px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={sourceFilters.includes(source)}
+                      onChange={() => handleSourceChange(source)}
+                      style={{ marginRight: '8px' }}
+                    />
+                    {source}
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Clear All Button */}
@@ -408,14 +417,14 @@ const FilterDropdown = ({
           </button>
 
           {/* Active Filters Count */}
-          {(counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0 || alertFilter) && (
+          {(counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0 || sourceFilters.length > 0) && (
             <div style={{ 
               marginTop: '12px', 
               fontSize: '12px', 
               color: '#6b7280',
               textAlign: 'center'
             }}>
-              {counsellorFilters.length + stageFilters.length + statusFilters.length + (alertFilter ? 1 : 0)} filter(s) active
+              {counsellorFilters.length + stageFilters.length + statusFilters.length + sourceFilters.length} filter(s) active
             </div>
           )}
         </div>
@@ -424,11 +433,11 @@ const FilterDropdown = ({
   );
 };
 
-// UPDATED: Filter logic utility function with alert filter support
-export const applyFilters = (leads, counsellorFilters, stageFilters, statusFilters = [], alertFilter = false, getStageDisplayName, getStageKeyFromName, getDaysSinceLastActivity) => {
+// Filter logic utility function with source filter support
+export const applyFilters = (leads, counsellorFilters, stageFilters, statusFilters = [], sourceFilters = [], getStageDisplayName, getStageKeyFromName) => {
   let filteredLeads = leads.filter(lead => {
     // If no filters selected, show all leads
-    if (counsellorFilters.length === 0 && stageFilters.length === 0 && statusFilters.length === 0 && !alertFilter) {
+    if (counsellorFilters.length === 0 && stageFilters.length === 0 && statusFilters.length === 0 && sourceFilters.length === 0) {
       return true;
     }
 
@@ -459,45 +468,33 @@ export const applyFilters = (leads, counsellorFilters, stageFilters, statusFilte
     const statusMatch = statusFilters.length === 0 ||
                        statusFilters.includes(lead.category);
 
-    // NEW: Check alert filter
-    let alertMatch = true;
-    if (alertFilter && getDaysSinceLastActivity) {
-      const daysSince = getDaysSinceLastActivity(lead.id);
-      alertMatch = daysSince >= 3; // Only show leads with 3+ days since last activity
-    }
+    // Check source filter
+    const sourceMatch = sourceFilters.length === 0 ||
+                       sourceFilters.includes(lead.source);
 
     // Lead must match all filters (AND logic)
-    return counsellorMatch && stageMatch && statusMatch && alertMatch;
+    return counsellorMatch && stageMatch && statusMatch && sourceMatch;
   });
-
-  // NEW: If alert filter is active, sort by days since last activity (descending)
-  if (alertFilter && getDaysSinceLastActivity) {
-    filteredLeads = filteredLeads.sort((a, b) => {
-      const aDays = getDaysSinceLastActivity(a.id);
-      const bDays = getDaysSinceLastActivity(b.id);
-      return bDays - aDays; // Descending order (highest days first)
-    });
-  }
 
   return filteredLeads;
 };
 
-// UPDATED: FilterButton component with alert filter support
+// FilterButton component with source filter support
 export const FilterButton = ({ 
   showFilter, 
   setShowFilter, 
   counsellorFilters, 
   stageFilters, 
   statusFilters = [],
-  alertFilter = false, // NEW: Alert filter
+  sourceFilters = [],
   setCounsellorFilters, 
   setStageFilters,
   setStatusFilters,
-  setAlertFilter, // NEW: Alert filter setter
-  settingsData, // Receive settings data
-  getFieldLabel, // NEW: Receive getFieldLabel function
-  getStageKeyFromName, // NEW: Stage conversion function
-  getStageDisplayName // NEW: Stage conversion function
+  setSourceFilters,
+  settingsData,
+  getFieldLabel,
+  getStageKeyFromName,
+  getStageDisplayName
 }) => (
   <div style={{ position: 'relative' }}>
     <button 
@@ -508,7 +505,7 @@ export const FilterButton = ({
       <Filter size={16} />
       Filter
       {/* Active indicator */}
-      {(counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0 || alertFilter) && (
+      {(counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0 || sourceFilters.length > 0) && (
         <span style={{
           position: 'absolute',
           top: '-2px',
@@ -527,20 +524,20 @@ export const FilterButton = ({
       counsellorFilters={counsellorFilters}
       stageFilters={stageFilters}
       statusFilters={statusFilters}
-      alertFilter={alertFilter} // NEW: Pass alert filter
+      sourceFilters={sourceFilters}
       setCounsellorFilters={setCounsellorFilters}
       setStageFilters={setStageFilters}
       setStatusFilters={setStatusFilters}
-      setAlertFilter={setAlertFilter} // NEW: Pass alert filter setter
+      setSourceFilters={setSourceFilters}
       settingsData={settingsData}
-      getFieldLabel={getFieldLabel} // NEW: Pass getFieldLabel
-      getStageKeyFromName={getStageKeyFromName} // NEW: Pass stage conversion
-      getStageDisplayName={getStageDisplayName} // NEW: Pass stage conversion
+      getFieldLabel={getFieldLabel}
+      getStageKeyFromName={getStageKeyFromName}
+      getStageDisplayName={getStageDisplayName}
       onClearAll={() => {
         setCounsellorFilters([]);
         setStageFilters([]);
         setStatusFilters([]);
-        setAlertFilter(false); // NEW: Clear alert filter
+        setSourceFilters([]);
       }}
     />
   </div>
