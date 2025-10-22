@@ -7,7 +7,7 @@ import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import FilterDropdown, { FilterButton, applyFilters } from './FilterDropdown';
 import LeadStateProvider, { useLeadState } from './LeadStateProvider';
 import SettingsDataProvider, { useSettingsData } from '../contexts/SettingsDataProvider';
-import MobileHeaderDropdown from './MobileHeaderDropdown';
+
 import { TABLE_NAMES } from '../config/tableNames';
 import { 
   Search,
@@ -127,10 +127,14 @@ const FollowUpTable = ({ onLogout, user }) => {
   const [lastActivityData, setLastActivityData] = useState({});
 
   // Filter states
+  // Filter states
   const [showFilter, setShowFilter] = useState(false);
   const [counsellorFilters, setCounsellorFilters] = useState([]);
   const [stageFilters, setStageFilters] = useState([]);
   const [statusFilters, setStatusFilters] = useState([]);
+  const [sourceFilters, setSourceFilters] = useState([]);
+
+  // DATE RANGE STATES
 
   // DATE RANGE STATES
   const [dateRange, setDateRange] = useState({
@@ -622,7 +626,7 @@ const FollowUpTable = ({ onLogout, user }) => {
   useEffect(() => {
     setSelectedLeads([]);
     setSelectAll(false);
-  }, [searchTerm, counsellorFilters, stageFilters, statusFilters, dateRange]);
+  }, [searchTerm, counsellorFilters, stageFilters, statusFilters, sourceFilters, dateRange]);
 
   // Calculate stage counts
   const getStageCount = (stageName) => {
@@ -985,7 +989,7 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
     
     // Then apply filters on the lead data
-    if (counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0) {
+    if (counsellorFilters.length > 0 || stageFilters.length > 0 || statusFilters.length > 0 || sourceFilters.length > 0) {
       filtered = filtered.filter(row => {
         const lead = row.leadData;
         
@@ -1006,7 +1010,13 @@ const FollowUpTable = ({ onLogout, user }) => {
         }
         
         // Status filter
+        // Status filter
         if (statusFilters.length > 0 && !statusFilters.includes(lead.category)) {
+          return false;
+        }
+        
+        // Source filter
+        if (sourceFilters.length > 0 && !sourceFilters.includes(lead.source)) {
           return false;
         }
         
@@ -1166,10 +1176,12 @@ const FollowUpTable = ({ onLogout, user }) => {
                 setShowFilter={setShowFilter}
                 counsellorFilters={counsellorFilters}
                 stageFilters={stageFilters}
-                statusFilters={statusFilters}  
+                statusFilters={statusFilters}
+                sourceFilters={sourceFilters}
                 setCounsellorFilters={setCounsellorFilters}
                 setStageFilters={setStageFilters}
                 setStatusFilters={setStatusFilters}
+                setSourceFilters={setSourceFilters}
                 settingsData={settingsData} 
                 getFieldLabel={getFieldLabel}
                 getStageKeyFromName={getStageKeyFromName}
@@ -1178,26 +1190,7 @@ const FollowUpTable = ({ onLogout, user }) => {
             </div>
 
             {/* Mobile View */}
-            <div className="mobile-header-actions">
-              <MobileHeaderDropdown
-                searchTerm={searchTerm}
-                onSearchChange={handleSearchChange}
-                showFilter={showFilter}
-                setShowFilter={setShowFilter}
-                counsellorFilters={counsellorFilters}
-                stageFilters={stageFilters}
-                statusFilters={statusFilters}
-                setCounsellorFilters={setCounsellorFilters}
-                setStageFilters={setStageFilters}
-                setStatusFilters={setStatusFilters}
-                settingsData={settingsData}
-                getFieldLabel={getFieldLabel}
-                getStageKeyFromName={getStageKeyFromName}
-                getStageDisplayName={getStageDisplayName}
-                FilterButton={FilterButton}
-                hideAddButtons={true}
-              />
-            </div>
+            
           </div>
         </div>
 
