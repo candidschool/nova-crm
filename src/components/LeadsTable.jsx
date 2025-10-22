@@ -11,7 +11,7 @@ import LeadStateProvider,{ useLeadState } from './LeadStateProvider';
 import SettingsDataProvider, { useSettingsData } from '../contexts/SettingsDataProvider';
 import ImportLeadsModal from './ImportLeadsModal';
 import { TABLE_NAMES } from '../config/tableNames';
-import MobileHeaderDropdown from './MobileHeaderDropdown';
+
 
 import { 
   Search,
@@ -120,10 +120,10 @@ const LeadsTable = ({ onLogout, user }) => {
   const [latestComments, setLatestComments] = useState({});
 
   const [showFilter, setShowFilter] = useState(false);
-  const [counsellorFilters, setCounsellorFilters] = useState([]);
-  const [stageFilters, setStageFilters] = useState([]);
-  const [statusFilters, setStatusFilters] = useState([]);
-  const [alertFilter, setAlertFilter] = useState(false);
+const [counsellorFilters, setCounsellorFilters] = useState([]);
+const [stageFilters, setStageFilters] = useState([]);
+const [statusFilters, setStatusFilters] = useState([]);
+const [sourceFilters, setSourceFilters] = useState([]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const leadsPerPage = 1000;
@@ -329,7 +329,7 @@ const LeadsTable = ({ onLogout, user }) => {
     setSelectedLeads([]);
     setSelectAll(false);
     setCurrentPage(1);
-  }, [searchTerm, counsellorFilters, stageFilters, statusFilters, alertFilter]);
+  }, [searchTerm, counsellorFilters, stageFilters, statusFilters, sourceFilters]);
 
   const getStageCount = (stageName) => {
     const stageKey = getStageKeyFromName(stageName);
@@ -832,7 +832,7 @@ const LeadsTable = ({ onLogout, user }) => {
       );
     }
     
-    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, alertFilter, getStageDisplayName, getStageKeyFromName);
+    return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, sourceFilters, getStageDisplayName, getStageKeyFromName);
   };
 
   const allFilteredLeads = getDisplayLeads();
@@ -968,11 +968,11 @@ const LeadsTable = ({ onLogout, user }) => {
                 counsellorFilters={counsellorFilters}
                 stageFilters={stageFilters}
                 statusFilters={statusFilters}
-                alertFilter={alertFilter}
+                sourceFilters={sourceFilters}
                 setCounsellorFilters={setCounsellorFilters}
                 setStageFilters={setStageFilters}
                 setStatusFilters={setStatusFilters}
-                setAlertFilter={setAlertFilter}
+                setSourceFilters={setSourceFilters}
                 settingsData={settingsData} 
                 getFieldLabel={getFieldLabel}
                 getStageKeyFromName={getStageKeyFromName}
@@ -990,29 +990,7 @@ const LeadsTable = ({ onLogout, user }) => {
               </button>
             </div>
 
-            <div className="mobile-header-actions">
-              <MobileHeaderDropdown
-                searchTerm={searchTerm}
-                onSearchChange={handleSearchChange}
-                showFilter={showFilter}
-                setShowFilter={setShowFilter}
-                counsellorFilters={counsellorFilters}
-                stageFilters={stageFilters}
-                statusFilters={statusFilters}
-                alertFilter={alertFilter}
-                setCounsellorFilters={setCounsellorFilters}
-                setStageFilters={setStageFilters}
-                setStatusFilters={setStatusFilters}
-                setAlertFilter={setAlertFilter}
-                settingsData={settingsData}
-                getFieldLabel={getFieldLabel}
-                getStageKeyFromName={getStageKeyFromName}
-                getStageDisplayName={getStageDisplayName}
-                onShowImportModal={handleShowImportModal}
-                onShowAddForm={handleShowAddForm}
-                FilterButton={FilterButton}
-              />
-            </div>
+            
           </div>
         </div>
 
