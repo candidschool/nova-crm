@@ -6195,3 +6195,274 @@
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/*Export Dialog*/
+.export-dialog-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          font-family: 'Inter', sans-serif;
+        }
+
+        .export-dialog {
+          background: white;
+          border-radius: 12px;
+          width: 90%;
+          max-width: 550px;
+          max-height: 85vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          animation: slideIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .export-dialog-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px 24px 16px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .export-icon-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 48px;
+          height: 48px;
+          background: #ecfdf5;
+          border-radius: 50%;
+        }
+
+        .file-icon {
+          color: #10b981;
+        }
+
+        .success-icon {
+          color: #10b981;
+          animation: scaleIn 0.3s ease-out;
+        }
+
+        @keyframes scaleIn {
+          from {
+            transform: scale(0.5);
+          }
+          to {
+            transform: scale(1);
+          }
+        }
+
+        .close-button {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 8px;
+          border-radius: 6px;
+          color: #6b7280;
+          transition: all 0.2s;
+        }
+
+        .close-button:hover:not(:disabled) {
+          background: #f3f4f6;
+          color: #374151;
+        }
+
+        .close-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .export-dialog-content {
+          padding: 20px 24px;
+        }
+
+        .export-dialog-content h2 {
+          margin: 0 0 12px 0;
+          font-size: 20px;
+          font-weight: 600;
+          color: #111827;
+        }
+
+        .export-message {
+          margin: 0 0 20px 0;
+          color: #6b7280;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .export-columns-info {
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 16px;
+          margin-bottom: 16px;
+        }
+
+        .columns-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .column-badge {
+          display: inline-block;
+          padding: 4px 10px;
+          background: #10b981;
+          color: white;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 500;
+        }
+
+        .selected-leads-list {
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 16px;
+          margin-bottom: 16px;
+        }
+
+        .selected-leads-list h4 {
+          margin: 0 0 12px 0;
+          font-size: 14px;
+          font-weight: 600;
+          color: #374151;
+        }
+
+        .leads-list {
+          max-height: 200px;
+          overflow-y: auto;
+        }
+
+        .lead-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 8px 0;
+          border-bottom: 1px solid #e5e7eb;
+        }
+
+        .lead-item:last-child {
+          border-bottom: none;
+        }
+
+        .lead-id {
+          font-size: 12px;
+          font-weight: 600;
+          color: #10b981;
+          background: #ecfdf5;
+          padding: 2px 6px;
+          border-radius: 4px;
+          min-width: 50px;
+        }
+
+        .lead-name {
+          font-size: 13px;
+          color: #374151;
+          font-weight: 500;
+        }
+
+        .bulk-export-notice {
+          background: #ecfdf5;
+          border: 1px solid #10b981;
+          border-radius: 6px;
+          padding: 12px;
+          margin-bottom: 16px;
+        }
+
+        .bulk-export-notice p {
+          margin: 0;
+          font-size: 13px;
+          color: #065f46;
+        }
+
+        .export-dialog-actions {
+          display: flex;
+          gap: 12px;
+          padding: 20px 24px;
+          border-top: 1px solid #e5e7eb;
+          background: #f9fafb;
+          border-radius: 0 0 12px 12px;
+        }
+
+        .cancel-button, .export-button {
+          flex: 1;
+          padding: 10px 16px;
+          border-radius: 6px;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .cancel-button {
+          background: white;
+          color: #374151;
+          border: 1px solid #d1d5db;
+        }
+
+        .cancel-button:hover:not(:disabled) {
+          background: #f9fafb;
+          border-color: #9ca3af;
+        }
+
+        .cancel-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .export-button {
+          background: #10b981;
+          color: white;
+          border: 1px solid #10b981;
+        }
+
+        .export-button:hover:not(:disabled) {
+          background: #059669;
+          border-color: #059669;
+        }
+
+        .export-button:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .export-button:active:not(:disabled) {
+          transform: translateY(1px);
+        }
+
+        .spinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
