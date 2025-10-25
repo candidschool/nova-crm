@@ -6,8 +6,9 @@ import AddLeadForm from './AddLeadForm';
 import LeftSidebar from './LeftSidebar';
 import LeadSidebar from './LeadSidebar';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
+import ExportLeadsDialog from './ExportLeadsDialog';
 import FilterDropdown, { FilterButton, applyFilters } from './FilterDropdown';
-import LeadStateProvider,{ useLeadState } from './LeadStateProvider';
+import { useLeadState } from './LeadStateProvider';
 import SettingsDataProvider, { useSettingsData } from '../contexts/SettingsDataProvider';
 import ImportLeadsModal from './ImportLeadsModal';
 import { TABLE_NAMES } from '../config/tableNames';
@@ -36,10 +37,11 @@ import {
   CheckCircle,
   Trash2,
   Plus,
-  X
+  X,
+  Download
 } from 'lucide-react';
 
-const LeadsTable = ({ onLogout, user }) => {
+const LeadsTable = ({ onLogout }) => {
   const { 
     settingsData, 
     getFieldLabel,
@@ -59,6 +61,11 @@ const LeadsTable = ({ onLogout, user }) => {
     leadsData, 
     setLeadsData,
     updateCompleteLeadData,
+    user, 
+      canEditLead, 
+      canDeleteLeads, 
+      canAddLeads ,
+        canReassignLeads,
     getScoreFromStage,
     getCategoryFromStage
   } = useLeadState();
@@ -89,6 +96,7 @@ const LeadsTable = ({ onLogout, user }) => {
   const [selectedLeads, setSelectedLeads] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [isEditingMode, setIsEditingMode] = useState(false);
@@ -322,8 +330,18 @@ const [sourceFilters, setSourceFilters] = useState([]);
   };
 
   const handleDeleteCancel = () => {
-    setShowDeleteDialog(false);
-  };
+  setShowDeleteDialog(false);
+};
+
+const handleExportClick = () => {
+  if (selectedLeads.length > 0) {
+    setShowExportDialog(true);
+  }
+};
+
+const handleExportCancel = () => {
+  setShowExportDialog(false);
+};
 
   useEffect(() => {
     setSelectedLeads([]);
@@ -458,8 +476,8 @@ const [sourceFilters, setSourceFilters] = useState([]);
 
       if (error) throw error;
 
-      const customFields = await settingsService.getCustomFieldsForLead(leadId);
-      const customFieldsMap = { [leadId]: customFields };
+      // Use getCustomFieldsForLeads (plural) with array of IDs
+      const customFieldsMap = await settingsService.getCustomFieldsForLeads([leadId]);
 
       const convertedLead = convertDatabaseToUI(data, customFieldsMap);
 
@@ -625,7 +643,7 @@ const [sourceFilters, setSourceFilters] = useState([]);
     isOpen: true,
     leadId: leadId,
     currentStage: currentStage,
-    selectedStage: currentStage,  // ← Set to currentStage
+    selectedStage: currentStage,  // â† Set to currentStage
     comment: '',
     error: ''
   });
@@ -939,16 +957,44 @@ const [sourceFilters, setSourceFilters] = useState([]);
               Total Leads {allFilteredLeads.length}
             </span>
             
-            {selectedLeads.length > 0 && (
-              <button 
-                className="delete-selected-btn" 
-                onClick={handleDeleteClick}
-                disabled={isDeleting}
-              >
-                <Trash2 size={16} />
-                Delete {selectedLeads.length} Selected
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+  {canDeleteLeads() && selectedLeads.length > 0 && (
+    <button 
+      className="delete-selected-btn" 
+      onClick={handleDeleteClick}
+      disabled={isDeleting}
+    >
+      <Trash2 size={16} />
+      Delete {selectedLeads.length} Selected
+    </button>
+  )}
+
+  {selectedLeads.length > 0 && (
+    <button 
+      className="export-selected-btn" 
+      onClick={handleExportClick}
+      style={{
+        padding: '8px 16px',
+        backgroundColor: '#10b981',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        cursor: 'pointer',
+        fontSize: '14px',
+        fontWeight: '500',
+        transition: 'all 0.2s'
+      }}
+      onMouseOver={(e) => e.target.style.backgroundColor = '#059669'}
+      onMouseOut={(e) => e.target.style.backgroundColor = '#10b981'}
+    >
+      <Download size={16} />
+      Export {selectedLeads.length} Selected
+    </button>
+  )}
+</div>
           </div>
           <div className="header-right">
             <div className="desktop-header-actions">
@@ -1006,20 +1052,22 @@ const [sourceFilters, setSourceFilters] = useState([]);
           <table className="nova-table">
             <thead>
               <tr>
-                <th>
-                  <input 
-                    type="checkbox" 
-                    className="select-all"
-                    checked={selectAll}
-                    onChange={(e) => handleSelectAllChange(e.target.checked)}
-                  />
-                </th>
+                {canDeleteLeads() && (
+                  <th>
+                    <input 
+                      type="checkbox" 
+                      className="select-all"
+                      checked={selectAll}
+                      onChange={(e) => handleSelectAllChange(e.target.checked)}
+                    />
+                  </th>
+                )}
                 <th>ID</th>
                 <th>Parent</th>
                 <th>Phone</th>
                 <th className="desktop-only">{getFieldLabel('grade')}</th>
                 <th>Stage</th>
-                <th className="desktop-only">Status</th>
+                <th className="desktop-only">Source</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
                 <th>Comment</th>
               </tr>
@@ -1032,14 +1080,16 @@ const [sourceFilters, setSourceFilters] = useState([]);
                     onClick={() => openSidebar(lead)} 
                     className="table-row mobile-tap-row"
                   >
-                    <td>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedLeads.includes(lead.id)}
-                        onChange={(e) => handleIndividualCheckboxChange(lead.id, e.target.checked)}
-                        onClick={(e) => e.stopPropagation()} 
-                      />
-                    </td>
+                    {canDeleteLeads() && (
+                          <td>
+                            <input 
+                              type="checkbox" 
+                              checked={selectedLeads.includes(lead.id)}
+                              onChange={(e) => handleIndividualCheckboxChange(lead.id, e.target.checked)}
+                              onClick={(e) => e.stopPropagation()} 
+                            />
+                          </td>
+                        )}
                     <td>
                       <div className="id-info">
                         <div className="lead-id">{lead.id}</div>
@@ -1071,7 +1121,7 @@ const [sourceFilters, setSourceFilters] = useState([]);
                     
                     <td>
                       <span className="status-badge-text">
-                        {lead.category}
+                        {lead.source}
                       </span>
                     </td>
                     <td className="counsellor-middle">
@@ -1095,7 +1145,7 @@ const [sourceFilters, setSourceFilters] = useState([]);
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="no-data">
+                  <td colSpan={canDeleteLeads() ? "9" : "8"} className="no-data">
                     {searchTerm 
                       ? 'No results found for your search.' 
                       : 'No leads available. Click + Add Lead to create your first lead!'}
@@ -1208,6 +1258,9 @@ const [sourceFilters, setSourceFilters] = useState([]);
         getCounsellorInitials={getCounsellorInitials}
         getScoreFromStage={getStageScore}
         getCategoryFromStage={getStageCategory}
+        canEdit={selectedLead ? canEditLead(selectedLead) : false}
+        canReassign={selectedLead ? canReassignLeads(selectedLead) : false}
+        user={user}
       />
 
       <DeleteConfirmationDialog
@@ -1217,6 +1270,13 @@ const [sourceFilters, setSourceFilters] = useState([]);
         selectedLeads={selectedLeads}
         leadsData={leadsData}
       />
+
+      <ExportLeadsDialog
+  isOpen={showExportDialog}
+  onClose={handleExportCancel}
+  selectedLeads={selectedLeads}
+  leadsData={leadsData}
+/>
 
       {showAddForm && (
         <AddLeadForm
