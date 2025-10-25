@@ -1054,7 +1054,7 @@ const ColdLeads = ({ onLogout, user }) => {
                 <th>Phone</th>
                 <th className="desktop-only">{getFieldLabel('grade')}</th>
                 <th>Stage</th>
-                <th className="desktop-only">Status</th>
+                <th className="desktop-only">Source</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
                 <th>Notes</th>
                 <th>Reactivate</th>
@@ -1107,7 +1107,7 @@ const ColdLeads = ({ onLogout, user }) => {
                     
                     <td>
                       <span className="status-badge-text">
-                        {lead.category}
+                        {lead.source}
                       </span>
                     </td>
                     <td className="counsellor-middle">
