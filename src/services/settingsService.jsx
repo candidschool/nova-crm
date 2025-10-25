@@ -874,4 +874,4 @@ export const settingsService = {
       
     return data?.[0]?.sort_order || 0;
   }
-};
+}
