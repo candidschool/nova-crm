@@ -14,10 +14,32 @@ const ActionTab = ({
   sidebarFormData,
   stageStatuses,
   onStatusUpdate,
-  getFieldLabel
+  getFieldLabel,
+  canEdit = true
 }) => {
   return (
+   
     <div className="lead-sidebar-tab-content">
+      {/* Read-Only Notice for users without edit permission */}
+      {!canEdit && (
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: '#fef3c7',
+          color: '#92400e',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          fontSize: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid #fcd34d'
+        }}>
+          <span>⚠️</span>
+          <span>You don't have permission to send messages or perform actions on this lead.</span>
+        </div>
+      )}
+      
+      
       {/* Header Row */}
       <div className="lead-sidebar-action-header">
         <div>Stage Name</div>
@@ -43,6 +65,7 @@ const ActionTab = ({
             meetingTime={sidebarFormData.meetingTime}
             meetingLink={sidebarFormData.meetingLink}
             phone={selectedLead?.phone}
+            disabled={!canEdit}
           />
         </div>
         <div>
@@ -70,6 +93,7 @@ const ActionTab = ({
             alwaysVisible={true}
             parentsName={selectedLead?.parentsName}
             phone={selectedLead?.phone}
+            disabled={!canEdit}
           />
         </div>
         <div>
@@ -102,6 +126,7 @@ const ActionTab = ({
             parentsName={selectedLead?.parentsName}
             visitDate={sidebarFormData.visitDate}
             phone={selectedLead?.phone}
+            disabled={!canEdit}
           />
         </div>
         <div>
@@ -132,6 +157,7 @@ const ActionTab = ({
             getFieldLabel={getFieldLabel}  
             alwaysVisible={true}
             phone={selectedLead?.phone}
+            disabled={!canEdit}
           />
         </div>
         <div>
@@ -159,6 +185,7 @@ const ActionTab = ({
             alwaysVisible={true}
             kidsName={selectedLead?.kidsName}
             phone={selectedLead?.phone}
+            disabled={!canEdit}
           />
         </div>
         <div>
