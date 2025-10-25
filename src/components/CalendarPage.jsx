@@ -10,7 +10,16 @@ import { settingsService } from '../services/settingsService';
 
 const CalendarPage = ({ onLogout, user }) => {
   const { settingsData, getFieldLabel, getStageColor, getStageScore, getStageCategory } = useSettingsData();
-  const { setSelectedLead, updateCompleteLeadData } = useLeadState();
+  
+  // ✅ UPDATED: Import permission functions from useLeadState
+  const { 
+    setSelectedLead, 
+    updateCompleteLeadData,
+    user: contextUser,
+    canEditLead,
+    canReassignLeads,
+    canViewAllLeads
+  } = useLeadState();
 
   // Get stages for sidebar
   const stages = settingsData.stages.map(stage => ({
@@ -27,7 +36,26 @@ const CalendarPage = ({ onLogout, user }) => {
   
   // Filter state
   const [eventType, setEventType] = useState('meeting');
-  const [selectedCounsellor, setSelectedCounsellor] = useState('all');
+  
+  // ✅ UPDATED: Set initial selectedCounsellor based on user role
+  const getInitialCounsellor = () => {
+    if (!contextUser) return 'all';
+    
+    // Admin sees 'all' by default
+    if (contextUser.role === 'admin') return 'all';
+    
+    // Jr. Counselor sees all leads
+    if (contextUser.role === 'jr_counselor') return 'all';
+    
+    // Counselor and Outsider see only their own leads
+    if (contextUser.role === 'user' || contextUser.role === 'outsider') {
+      return contextUser.full_name || 'all';
+    }
+    
+    return 'all';
+  };
+  
+  const [selectedCounsellor, setSelectedCounsellor] = useState(getInitialCounsellor());
   
   // Data state
   const [allLeads, setAllLeads] = useState([]);
@@ -51,6 +79,12 @@ const CalendarPage = ({ onLogout, user }) => {
   for (let i = currentYear - 5; i <= currentYear + 5; i++) {
     yearOptions.push(i);
   }
+
+  // ✅ NEW: Update selectedCounsellor when user context changes
+  useEffect(() => {
+    const initialCounsellor = getInitialCounsellor();
+    setSelectedCounsellor(initialCounsellor);
+  }, [contextUser]);
 
   // ✅ FIXED: Fetch ALL leads using batching
   const fetchLeads = async () => {
@@ -83,10 +117,27 @@ const CalendarPage = ({ onLogout, user }) => {
 
       console.log('✅ Total leads fetched:', allLeadsData.length);
 
-      const leadIds = allLeadsData.map(lead => lead.id);
+      // ✅ UPDATED: Apply role-based filtering
+      let filteredLeadsData = allLeadsData;
+      
+      if (contextUser) {
+        // Admin and Jr. Counselor see all leads
+        if (contextUser.role === 'admin' || contextUser.role === 'jr_counselor') {
+          filteredLeadsData = allLeadsData;
+        } 
+        // Counselor and Outsider see only their own leads
+        else if (contextUser.role === 'user' || contextUser.role === 'outsider') {
+          filteredLeadsData = allLeadsData.filter(lead => 
+            lead.counsellor === contextUser.full_name
+          );
+          console.log(`Filtered to ${filteredLeadsData.length} leads for ${contextUser.full_name}`);
+        }
+      }
+
+      const leadIds = filteredLeadsData.map(lead => lead.id);
       const customFieldsByLead = await settingsService.getCustomFieldsForLeads(leadIds);
 
-      const convertedLeads = allLeadsData.map(dbRecord => {
+      const convertedLeads = filteredLeadsData.map(dbRecord => {
         let meetingDate = '', meetingTime = '', visitDate = '', visitTime = '';
 
         if (dbRecord.meet_datetime) {
@@ -147,7 +198,7 @@ const CalendarPage = ({ onLogout, user }) => {
 
   useEffect(() => {
     fetchLeads();
-  }, []);
+  }, [contextUser]);
 
   const getFilteredLeads = () => {
     return allLeads.filter(lead => {
@@ -156,7 +207,10 @@ const CalendarPage = ({ onLogout, user }) => {
         : (lead.visitDate && lead.visitTime);
       
       if (!hasEvent) return false;
+      
+      // ✅ UPDATED: Filter by counsellor only if not "all"
       if (selectedCounsellor !== 'all' && lead.counsellor !== selectedCounsellor) return false;
+      
       return true;
     });
   };
@@ -188,11 +242,17 @@ const CalendarPage = ({ onLogout, user }) => {
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-      days.push({ day, isCurrentMonth: true, month: currentMonth, year: currentYear });
+      days.push({
+        day,
+        isCurrentMonth: true,
+        month: currentMonth,
+        year: currentYear
+      });
     }
 
-    const remainingDays = 42 - days.length;
-    for (let day = 1; day <= remainingDays; day++) {
+    const totalCells = days.length;
+    const remainingCells = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    for (let day = 1; day <= remainingCells; day++) {
       days.push({
         day,
         isCurrentMonth: false,
@@ -204,10 +264,7 @@ const CalendarPage = ({ onLogout, user }) => {
     return days;
   };
 
-  const isToday = (year, month, day) => {
-    const today = new Date();
-    return today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-  };
+  const calendarDays = generateCalendarDays();
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -227,50 +284,53 @@ const CalendarPage = ({ onLogout, user }) => {
     }
   };
 
+  const isToday = (year, month, day) => {
+    const today = new Date();
+    return (
+      today.getFullYear() === year &&
+      today.getMonth() === month &&
+      today.getDate() === day
+    );
+  };
+
   const handleDayClick = (dayObj) => {
     if (!dayObj.isCurrentMonth) return;
+    
     const events = getEventsForDate(dayObj.year, dayObj.month, dayObj.day);
     if (events.length === 0) return;
-    if (events.length === 1) {
-      openSidebar(events[0]);
-    } else {
-      setSelectedDate(new Date(dayObj.year, dayObj.month, dayObj.day));
-      setSelectedDateEvents(events);
-      setShowEventModal(true);
-    }
+
+    const date = new Date(dayObj.year, dayObj.month, dayObj.day);
+    setSelectedDate(date);
+    setSelectedDateEvents(events);
+    setShowEventModal(true);
   };
 
-  const handleEventClick = (lead) => {
+  const handleEventClick = (event) => {
     setShowEventModal(false);
-    openSidebar(lead);
-  };
-
-  const openSidebar = (lead) => {
-    setSelectedLeadState(lead);
-    setSelectedLead(lead);
+    setSelectedLeadState(event);
     setSidebarFormData({
-      parentsName: lead.parentsName || '',
-      kidsName: lead.kidsName || '',
-      grade: lead.grade || '',
-      source: lead.source || settingsData.sources?.[0]?.name || 'Instagram',
-      stage: lead.stage,
-      counsellor: lead.counsellor || '',
-      offer: lead.offer || 'Welcome Kit',
-      email: lead.email || '',
-      phone: lead.phone || '',
-      secondPhone: lead.secondPhone || '',
-      occupation: lead.occupation || '',
-      location: lead.location || '',
-      currentSchool: lead.currentSchool || '',
-      meetingDate: lead.meetingDate || '',
-      meetingTime: lead.meetingTime || '',
-      meetingLink: lead.meetingLink || '',
-      visitDate: lead.visitDate || '',
-      visitTime: lead.visitTime || '',
-      visitLocation: lead.visitLocation || '',
-      registrationFees: lead.registrationFees || '',
-      enrolled: lead.enrolled || '',
-      notes: lead.notes || ''
+      parentsName: event.parentsName || '',
+      kidsName: event.kidsName || '',
+      phone: event.phone || '',
+      secondPhone: event.secondPhone || '',
+      email: event.email || '',
+      grade: event.grade || '',
+      source: event.source || '',
+      counsellor: event.counsellor || '',
+      stage: event.stage || '',
+      occupation: event.occupation || '',
+      location: event.location || '',
+      currentSchool: event.currentSchool || '',
+      offer: event.offer || '',
+      meetingDate: event.meetingDate || '',
+      meetingTime: event.meetingTime || '',
+      meetingLink: event.meetingLink || '',
+      visitDate: event.visitDate || '',
+      visitTime: event.visitTime || '',
+      visitLocation: event.visitLocation || '',
+      registrationFees: event.registrationFees || '',
+      enrolled: event.enrolled || '',
+      notes: event.notes || ''
     });
     setShowSidebar(true);
     setIsEditingMode(false);
@@ -282,54 +342,70 @@ const CalendarPage = ({ onLogout, user }) => {
     setIsEditingMode(false);
   };
 
-  const handleSidebarFieldChange = (field, value) => {
-    setSidebarFormData(prev => ({ ...prev, [field]: value }));
+  const handleSidebarFieldChange = (fieldName, value) => {
+    setSidebarFormData(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
   };
 
   const handleUpdateAllFields = async () => {
+    if (!selectedLeadState) return;
+
     try {
+      let meetDateTime = null;
+      if (sidebarFormData.meetingDate && sidebarFormData.meetingTime) {
+        meetDateTime = `${sidebarFormData.meetingDate}T${sidebarFormData.meetingTime}:00`;
+      }
+
+      let visitDateTime = null;
+      if (sidebarFormData.visitDate && sidebarFormData.visitTime) {
+        visitDateTime = `${sidebarFormData.visitDate}T${sidebarFormData.visitTime}:00`;
+      }
+
       let formattedPhone = sidebarFormData.phone;
       if (formattedPhone && !formattedPhone.startsWith('+91')) {
-        formattedPhone = `+91${formattedPhone.replace(/^\+91/, '')}`;
+        formattedPhone = formattedPhone.replace(/^\+91/, '');
+        formattedPhone = `+91${formattedPhone}`;
       }
 
-      const updateData = {
-        parents_name: sidebarFormData.parentsName,
-        kids_name: sidebarFormData.kidsName,
-        grade: sidebarFormData.grade,
-        source: sidebarFormData.source,
-        phone: formattedPhone,
-        second_phone: sidebarFormData.secondPhone,
-        stage: sidebarFormData.stage,
-        score: getStageScore(sidebarFormData.stage),
-        category: getStageCategory(sidebarFormData.stage),
-        counsellor: sidebarFormData.counsellor,
-        offer: sidebarFormData.offer,
-        email: sidebarFormData.email,
-        occupation: sidebarFormData.occupation,
-        location: sidebarFormData.location,
-        current_school: sidebarFormData.currentSchool,
-        meet_link: sidebarFormData.meetingLink,
-        visit_location: sidebarFormData.visitLocation,
-        reg_fees: sidebarFormData.registrationFees,
-        enrolled: sidebarFormData.enrolled,
-        notes: sidebarFormData.notes,
-        updated_at: new Date().toISOString()
-      };
-
-      if (sidebarFormData.meetingDate && sidebarFormData.meetingTime) {
-        updateData.meet_datetime = `${sidebarFormData.meetingDate}T${sidebarFormData.meetingTime}:00`;
-      }
-      if (sidebarFormData.visitDate && sidebarFormData.visitTime) {
-        updateData.visit_datetime = `${sidebarFormData.visitDate}T${sidebarFormData.visitTime}:00`;
+      let formattedSecondPhone = sidebarFormData.secondPhone;
+      if (formattedSecondPhone && !formattedSecondPhone.startsWith('+91')) {
+        formattedSecondPhone = formattedSecondPhone.replace(/^\+91/, '');
+        formattedSecondPhone = `+91${formattedSecondPhone}`;
       }
 
       const { error } = await supabase
         .from(TABLE_NAMES.LEADS)
-        .update(updateData)
+        .update({
+          parents_name: sidebarFormData.parentsName,
+          kids_name: sidebarFormData.kidsName,
+          phone: formattedPhone,
+          second_phone: formattedSecondPhone,
+          email: sidebarFormData.email,
+          grade: sidebarFormData.grade,
+          source: sidebarFormData.source,
+          counsellor: sidebarFormData.counsellor,
+          stage: sidebarFormData.stage,
+          occupation: sidebarFormData.occupation,
+          location: sidebarFormData.location,
+          current_school: sidebarFormData.currentSchool,
+          offer: sidebarFormData.offer,
+          meet_datetime: meetDateTime,
+          meet_link: sidebarFormData.meetingLink,
+          visit_datetime: visitDateTime,
+          visit_location: sidebarFormData.visitLocation,
+          reg_fees: sidebarFormData.registrationFees,
+          enrolled: sidebarFormData.enrolled,
+          notes: sidebarFormData.notes,
+          score: getStageScore(sidebarFormData.stage),
+          category: getStageCategory(sidebarFormData.stage),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', selectedLeadState.id);
 
       if (error) throw error;
+
       setIsEditingMode(false);
       await fetchLeads();
       alert('Lead updated successfully!');
@@ -352,55 +428,49 @@ const CalendarPage = ({ onLogout, user }) => {
         .eq('id', leadId);
 
       if (error) throw error;
+
       await fetchLeads();
-      alert('Stage updated successfully!');
     } catch (error) {
       console.error('Error updating stage:', error);
-      alert('Error updating stage: ' + error.message);
     }
   };
 
-  const getStageCount = (stageName) => {
-    const stage = settingsData.stages.find(s => s.name === stageName);
-    const stageKey = stage?.stage_key || stageName;
-    return allLeads.filter(lead => lead.stage === stageKey || lead.stage === stageName).length;
+  // ✅ NEW: Helper function to check if user is admin
+  const isAdmin = () => {
+    return contextUser?.role === 'admin';
   };
 
-  const calendarDays = generateCalendarDays();
+  // ✅ NEW: Get counsellor display label for non-admin users
+  const getCounsellorDisplayLabel = () => {
+    if (!contextUser) return 'All Counsellors';
+    
+    if (contextUser.role === 'jr_counselor') {
+      return 'All Counsellors';
+    }
+    
+    if (contextUser.role === 'user' || contextUser.role === 'outsider') {
+      return contextUser.full_name || 'My Events';
+    }
+    
+    return 'All Counsellors';
+  };
 
   if (loading) {
     return (
-      <div className="calendar-page">
-        <LeftSidebar 
-          activeNavItem="calendarpage"
-          activeSubmenuItem=""
-          stages={stages}
-          getStageCount={getStageCount}
-          stagesTitle="Calendar"
-          stagesIcon={CalendarIcon}
-          onLogout={onLogout}
-          user={user}
-        />
-        <div className="calendar-loading">
-          <Loader2 size={24} className="animate-spin" />
-          <span style={{ marginLeft: '12px' }}>Loading calendar...</span>
+      <div className="leads-container">
+        <LeftSidebar onLogout={onLogout} user={user} />
+        <div className="leads-main-content">
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+            <Loader2 className="spinner" size={40} />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="calendar-page">
-      <LeftSidebar 
-        activeNavItem="calendarpage"
-        activeSubmenuItem=""
-        stages={stages}
-        getStageCount={getStageCount}
-        stagesTitle="Calendar"
-        stagesIcon={CalendarIcon}
-        onLogout={onLogout}
-        user={user}
-      />
+    <div className="leads-container">
+      <LeftSidebar onLogout={onLogout} user={user} />
 
       <div className="calendar-main-content">
         <div className="calendar-header">
@@ -421,21 +491,42 @@ const CalendarPage = ({ onLogout, user }) => {
               </select>
             </div>
 
-            <div className="calendar-filter-dropdown">
-              <label className="calendar-filter-label">Counsellor</label>
-              <select 
-                className="calendar-filter-select"
-                value={selectedCounsellor}
-                onChange={(e) => setSelectedCounsellor(e.target.value)}
-              >
-                <option value="all">All Counsellors</option>
-                {settingsData?.counsellors?.map(counsellor => (
-                  <option key={counsellor.id} value={counsellor.name}>
-                    {counsellor.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* ✅ UPDATED: Counsellor filter - Only visible for Admin */}
+            {isAdmin() ? (
+              <div className="calendar-filter-dropdown">
+                <label className="calendar-filter-label">Counsellor</label>
+                <select 
+                  className="calendar-filter-select"
+                  value={selectedCounsellor}
+                  onChange={(e) => setSelectedCounsellor(e.target.value)}
+                >
+                  <option value="all">All Counsellors</option>
+                  {settingsData?.counsellors?.map(counsellor => (
+                    <option key={counsellor.id} value={counsellor.name}>
+                      {counsellor.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              // ✅ NEW: Display label for non-admin users
+              <div className="calendar-filter-dropdown">
+                <label className="calendar-filter-label">Counsellor</label>
+                <div 
+                  className="calendar-filter-select" 
+                  style={{ 
+                    backgroundColor: '#f3f4f6', 
+                    color: '#6b7280',
+                    cursor: 'default',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '8px 12px'
+                  }}
+                >
+                  {getCounsellorDisplayLabel()}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -561,6 +652,7 @@ const CalendarPage = ({ onLogout, user }) => {
           </div>
         )}
 
+        {/* ✅ UPDATED: Pass permission props to LeadSidebar */}
         <LeadSidebar
           key={selectedLeadState?.id}
           showSidebar={showSidebar}
@@ -583,6 +675,9 @@ const CalendarPage = ({ onLogout, user }) => {
           }}
           getScoreFromStage={(stage) => getStageScore(stage)}
           getCategoryFromStage={(stage) => getStageCategory(stage)}
+          canEdit={selectedLeadState ? canEditLead(selectedLeadState) : false}
+          canReassign={selectedLeadState ? canReassignLeads(selectedLeadState) : false}
+          user={contextUser}
         />
       </div>
     </div>
