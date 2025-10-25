@@ -1255,4 +1255,3 @@ const [sourceFilters, setSourceFilters] = useState([]);
 };
 
 export default EnrolledLeads;
-
