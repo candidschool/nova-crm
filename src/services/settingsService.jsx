@@ -3,7 +3,7 @@ import { TABLE_NAMES } from '../config/tableNames';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 export const settingsService = {
-  // Get all settings
+  // ✅ UPDATED: Get all settings with role information for counsellors
   async getAllSettings() {
     const { data, error } = await supabase
       .from(TABLE_NAMES.SETTINGS)
@@ -22,6 +22,29 @@ export const settingsService = {
       school: {}
     };
     
+    // ✅ NEW: Collect user IDs from counsellors to fetch roles
+    const userIds = [];
+    data?.forEach(item => {
+      if (item.type === 'counsellors' && item.value && item.value.user_id) {
+        userIds.push(item.value.user_id);
+      }
+    });
+    
+    // ✅ NEW: Fetch user data with roles if there are counsellors
+    let usersMap = {};
+    if (userIds.length > 0) {
+      const { data: usersData, error: usersError } = await supabase
+        .from(TABLE_NAMES.USERS)
+        .select('id, role')
+        .in('id', userIds);
+      
+      if (!usersError && usersData) {
+        usersData.forEach(user => {
+          usersMap[user.id] = user.role;
+        });
+      }
+    }
+    
     data?.forEach(item => {
       if (item.type === 'school') {
         grouped.school = item.value || {};
@@ -38,6 +61,8 @@ export const settingsService = {
         
         if (item.type === 'counsellors' && item.value && item.value.user_id) {
           itemData.user_id = item.value.user_id;
+          // ✅ NEW: Add role from usersMap
+          itemData.role = usersMap[item.value.user_id] || 'user';
         }
         
         grouped[item.type].push(itemData);
@@ -49,8 +74,9 @@ export const settingsService = {
     return grouped;
   },
 
+  // ✅ UPDATED: Create counsellor with user account and role
   async createCounsellorWithUser(counsellorData) {
-    const { name, email, password } = counsellorData;
+    const { name, email, password, role = 'user' } = counsellorData;
     
     try {
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -71,7 +97,7 @@ export const settingsService = {
           auth_id: authData.user.id,
           email: email,
           full_name: name,
-          role: 'user',
+          role: role, // ✅ NEW: Use role from counsellorData
           is_active: true
         }])
         .select()
@@ -84,7 +110,7 @@ export const settingsService = {
 
       const maxOrder = await this.getMaxSortOrder('counsellors');
       
-      const { data: counsellorData, error: counsellorError } = await supabase
+      const { data: counsellorDataResult, error: counsellorError } = await supabase
         .from(TABLE_NAMES.SETTINGS)
         .insert([{
           type: 'counsellors',
@@ -106,7 +132,7 @@ export const settingsService = {
       }
 
       return {
-        counsellor: counsellorData,
+        counsellor: counsellorDataResult,
         user: userData,
         auth: authData.user
       };
@@ -117,8 +143,9 @@ export const settingsService = {
     }
   },
 
+  // ✅ UPDATED: Update counsellor with user account and role
   async updateCounsellorWithUser(counsellorId, updateData) {
-    const { name, email, password } = updateData;
+    const { name, email, password, role = 'user' } = updateData;
     
     try {
       const { data: counsellor, error: counsellorError } = await supabase
@@ -146,7 +173,8 @@ export const settingsService = {
 
       const userUpdates = {
         full_name: name,
-        email: email
+        email: email,
+        role: role // ✅ NEW: Update role
       };
 
       const { error: userUpdateError } = await supabase
@@ -286,109 +314,32 @@ export const settingsService = {
       .eq('id', counsellorId)
       .eq('type', 'counsellors')
       .single();
-
+      
     if (error) throw error;
-
-    if (counsellor.value && counsellor.value.user_id) {
-      const { data: user, error: userError } = await supabase
-        .from(TABLE_NAMES.USERS)
-        .select('id, email, full_name, role, is_active')
-        .eq('id', counsellor.value.user_id)
-        .single();
-
-      if (!userError && user) {
-        counsellor.users = user;
-        counsellor.user_id = user.id;
-      }
+    
+    if (!counsellor.value || !counsellor.value.user_id) {
+      return { ...counsellor, users: null };
     }
-
-    return counsellor;
+    
+    const { data: user, error: userError } = await supabase
+      .from(TABLE_NAMES.USERS)
+      .select('*')
+      .eq('id', counsellor.value.user_id)
+      .single();
+      
+    if (userError) {
+      return { ...counsellor, users: null };
+    }
+    
+    return { ...counsellor, users: user };
   },
 
-  async updateSourceWithLeads(sourceId, newName) {
-    try {
-      const { data: source, error: sourceError } = await supabase
-        .from(TABLE_NAMES.SETTINGS)
-        .select('name')
-        .eq('id', sourceId)
-        .single();
-
-      if (sourceError) throw sourceError;
-
-      const oldSourceName = source.name;
-
-      const { error: updateError } = await supabase
-        .from(TABLE_NAMES.SETTINGS)
-        .update({ name: newName })
-        .eq('id', sourceId);
-
-      if (updateError) throw updateError;
-
-      if (oldSourceName !== newName) {
-        console.log(`Updating leads from source "${oldSourceName}" to "${newName}"`);
-        const { error: leadsUpdateError } = await supabase
-          .from(TABLE_NAMES.LEADS)
-          .update({ source: newName })
-          .eq('source', oldSourceName);
-
-        if (leadsUpdateError) {
-          console.error('Error updating leads with new source name:', leadsUpdateError);
-          throw leadsUpdateError;
-        }
-
-        console.log(`Successfully updated leads from "${oldSourceName}" to "${newName}"`);
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating source with leads:', error);
-      throw error;
-    }
-  },
-
-  async deleteSourceWithLeads(sourceId) {
-    try {
-      const { data: source, error: sourceError } = await supabase
-        .from(TABLE_NAMES.SETTINGS)
-        .select('name')
-        .eq('id', sourceId)
-        .single();
-
-      if (sourceError) throw sourceError;
-
-      const sourceName = source.name;
-
-      console.log(`Updating leads with source "${sourceName}" to "NA"`);
-      const { error: leadsUpdateError } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .update({ source: 'NA' })
-        .eq('source', sourceName);
-
-      if (leadsUpdateError) {
-        console.error('Error updating leads:', leadsUpdateError);
-        throw leadsUpdateError;
-      }
-
-      const { error: deleteError } = await supabase
-        .from(TABLE_NAMES.SETTINGS)
-        .delete()
-        .eq('id', sourceId);
-
-      if (deleteError) throw deleteError;
-
-      console.log(`Successfully updated ${sourceName}'s leads to "NA" and deleted source`);
-      return { success: true };
-    } catch (error) {
-      console.error('Error deleting source with leads:', error);
-      throw error;
-    }
-  },
-
-  async updateGradeWithLeads(gradeId, newName) {
+  // Grade management with leads synchronization
+  async updateGradeWithLeads(gradeId, newGradeName) {
     try {
       const { data: grade, error: gradeError } = await supabase
         .from(TABLE_NAMES.SETTINGS)
-        .select('name')
+        .select('*')
         .eq('id', gradeId)
         .single();
 
@@ -396,27 +347,19 @@ export const settingsService = {
 
       const oldGradeName = grade.name;
 
-      const { error: updateError } = await supabase
+      const { error: leadsUpdateError } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .update({ grade: newGradeName })
+        .eq('grade', oldGradeName);
+
+      if (leadsUpdateError) throw leadsUpdateError;
+
+      const { error: gradeUpdateError } = await supabase
         .from(TABLE_NAMES.SETTINGS)
-        .update({ name: newName })
+        .update({ name: newGradeName })
         .eq('id', gradeId);
 
-      if (updateError) throw updateError;
-
-      if (oldGradeName !== newName) {
-        console.log(`Updating leads from grade "${oldGradeName}" to "${newName}"`);
-        const { error: leadsUpdateError } = await supabase
-          .from(TABLE_NAMES.LEADS)
-          .update({ grade: newName })
-          .eq('grade', oldGradeName);
-
-        if (leadsUpdateError) {
-          console.error('Error updating leads with new grade name:', leadsUpdateError);
-          throw leadsUpdateError;
-        }
-
-        console.log(`Successfully updated leads from "${oldGradeName}" to "${newName}"`);
-      }
+      if (gradeUpdateError) throw gradeUpdateError;
 
       return { success: true };
     } catch (error) {
@@ -429,7 +372,7 @@ export const settingsService = {
     try {
       const { data: grade, error: gradeError } = await supabase
         .from(TABLE_NAMES.SETTINGS)
-        .select('name')
+        .select('*')
         .eq('id', gradeId)
         .single();
 
@@ -437,57 +380,117 @@ export const settingsService = {
 
       const gradeName = grade.name;
 
-      console.log(`Updating leads with grade "${gradeName}" to "NA"`);
       const { error: leadsUpdateError } = await supabase
         .from(TABLE_NAMES.LEADS)
-        .update({ grade: 'NA' })
+        .update({ grade: '' })
         .eq('grade', gradeName);
 
-      if (leadsUpdateError) {
-        console.error('Error updating leads:', leadsUpdateError);
-        throw leadsUpdateError;
-      }
+      if (leadsUpdateError) throw leadsUpdateError;
 
-      const { error: deleteError } = await supabase
-        .from(TABLE_NAMES.SETTINGS)
-        .delete()
-        .eq('id', gradeId);
-
-      if (deleteError) throw deleteError;
-
-      console.log(`Successfully updated ${gradeName}'s leads to "NA" and deleted grade`);
-      return { success: true };
+      return await this.deleteItem(gradeId);
     } catch (error) {
       console.error('Error deleting grade with leads:', error);
       throw error;
     }
   },
 
-  async updateStageWithLeads(stageId, newName) {
+  // Source management with leads synchronization
+  async updateSourceWithLeads(sourceId, newSourceName) {
+    try {
+      const { data: source, error: sourceError } = await supabase
+        .from(TABLE_NAMES.SETTINGS)
+        .select('*')
+        .eq('id', sourceId)
+        .single();
+
+      if (sourceError) throw sourceError;
+
+      const oldSourceName = source.name;
+
+      const { error: leadsUpdateError } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .update({ source: newSourceName })
+        .eq('source', oldSourceName);
+
+      if (leadsUpdateError) throw leadsUpdateError;
+
+      const { error: sourceUpdateError } = await supabase
+        .from(TABLE_NAMES.SETTINGS)
+        .update({ name: newSourceName })
+        .eq('id', sourceId);
+
+      if (sourceUpdateError) throw sourceUpdateError;
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating source with leads:', error);
+      throw error;
+    }
+  },
+
+  async deleteSourceWithLeads(sourceId) {
+    try {
+      const { data: source, error: sourceError } = await supabase
+        .from(TABLE_NAMES.SETTINGS)
+        .select('*')
+        .eq('id', sourceId)
+        .single();
+
+      if (sourceError) throw sourceError;
+
+      const sourceName = source.name;
+
+      const { error: leadsUpdateError } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .update({ source: '' })
+        .eq('source', sourceName);
+
+      if (leadsUpdateError) throw leadsUpdateError;
+
+      return await this.deleteItem(sourceId);
+    } catch (error) {
+      console.error('Error deleting source with leads:', error);
+      throw error;
+    }
+  },
+
+  // Stage management with leads synchronization
+  async updateStageWithLeads(stageId, newStageName) {
     try {
       const { data: stage, error: stageError } = await supabase
         .from(TABLE_NAMES.SETTINGS)
-        .select('name')
+        .select('*')
         .eq('id', stageId)
         .single();
 
       if (stageError) throw stageError;
 
       const oldStageName = stage.name;
+      const stageKey = stage.stage_key;
 
-      if (oldStageName !== newName) {
-        console.log(`Updating leads from stage "${oldStageName}" to "${newName}"`);
-        const { error: leadsUpdateError } = await supabase
-          .from(TABLE_NAMES.LEADS)
-          .update({ stage: newName })
-          .eq('stage', oldStageName);
+      if (!stageKey) {
+        console.warn('Stage has no stage_key, skipping leads update');
+        return { success: true };
+      }
 
-        if (leadsUpdateError) {
-          console.error('Error updating leads with new stage name:', leadsUpdateError);
-          throw leadsUpdateError;
-        }
+      console.log(`Updating leads from stage "${oldStageName}" (key: ${stageKey}) to "${newStageName}"`);
 
-        console.log(`Successfully updated leads from "${oldStageName}" to "${newName}"`);
+      const { error: leadsUpdateError } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .update({ stage: stageKey })
+        .eq('stage', oldStageName);
+
+      if (leadsUpdateError) {
+        console.error('Error updating leads with stage key:', leadsUpdateError);
+      }
+
+      const { error: leadsUpdateError2 } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .update({ stage: stageKey })
+        .eq('stage', stageKey);
+
+      if (leadsUpdateError2) {
+        console.error('Error ensuring leads have stage key:', leadsUpdateError2);
       }
 
       return { success: true };
@@ -497,212 +500,94 @@ export const settingsService = {
     }
   },
 
-  // ✅ EXISTING: Single lead custom fields fetch
-  async getCustomFieldsForLead(leadId) {
-    try {
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
-        .select('*')
-        .eq('lead_id', leadId);
-        
-      if (error) throw error;
-      
-      const customFieldsMap = {};
-      data?.forEach(field => {
-        customFieldsMap[field.field_key] = field.field_value;
-      });
-      
-      return customFieldsMap;
-    } catch (error) {
-      console.error('Error fetching custom fields for lead:', error);
-      throw error;
-    }
-  },
-
-  // ✅ NEW: Bulk fetch custom fields for multiple leads in ONE query
+  // Custom field management
   async getCustomFieldsForLeads(leadIds) {
-    if (!leadIds || leadIds.length === 0) {
-      return {};
-    }
-
+    if (!leadIds || leadIds.length === 0) return {};
+    
     try {
-      console.log(`Bulk fetching custom fields for ${leadIds.length} leads...`);
-      
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
+      const { data: customFieldsData, error } = await supabase
+        .from(TABLE_NAMES.CUSTOM_FIELD_VALUES)
         .select('*')
         .in('lead_id', leadIds);
 
       if (error) throw error;
 
-      console.log(`Received ${data.length} custom field records`);
-
-      // Group custom fields by lead_id
-      const customFieldsByLead = {};
+      const customFieldsMap = {};
       
-      data.forEach(record => {
-        const leadId = record.lead_id;
-        if (!customFieldsByLead[leadId]) {
-          customFieldsByLead[leadId] = {};
-        }
-        customFieldsByLead[leadId][record.field_key] = record.field_value;
-      });
-
-      // Ensure all lead IDs are in the map (even if they have no custom fields)
       leadIds.forEach(leadId => {
-        if (!customFieldsByLead[leadId]) {
-          customFieldsByLead[leadId] = {};
-        }
+        customFieldsMap[leadId] = {};
       });
 
-      console.log(`Organized custom fields for ${Object.keys(customFieldsByLead).length} leads`);
-      return customFieldsByLead;
-      
+      customFieldsData?.forEach(fieldValue => {
+        if (!customFieldsMap[fieldValue.lead_id]) {
+          customFieldsMap[fieldValue.lead_id] = {};
+        }
+        customFieldsMap[fieldValue.lead_id][fieldValue.field_key] = fieldValue.value;
+      });
+
+      return customFieldsMap;
     } catch (error) {
-      console.error('Error bulk fetching custom fields:', error);
+      console.error('Error fetching custom fields:', error);
       return {};
     }
   },
 
-  async saveCustomFieldsForLead(leadId, customFieldsData) {
+  async saveCustomFieldValue(leadId, fieldKey, value) {
     try {
-      console.log('Saving custom fields for lead:', leadId, customFieldsData);
-      
-      const { data: existingFields, error: fetchError } = await supabase
-        .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
-        .select('field_key')
-        .eq('lead_id', leadId);
-
-      if (fetchError) throw fetchError;
-
-      const existingFieldKeys = existingFields?.map(f => f.field_key) || [];
-      const newFieldKeys = Object.keys(customFieldsData);
-
-      const upsertPromises = [];
-      
-      for (const [fieldKey, fieldValue] of Object.entries(customFieldsData)) {
-        if (fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
-          upsertPromises.push(
-            supabase
-              .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
-              .upsert({
-                lead_id: leadId,
-                field_key: fieldKey,
-                field_value: fieldValue,
-                updated_at: new Date().toISOString()
-              }, {
-                onConflict: 'lead_id,field_key'
-              })
-          );
-        }
-      }
-
-      const fieldsToDelete = existingFieldKeys.filter(key => 
-        !newFieldKeys.includes(key) || 
-        !customFieldsData[key] || 
-        customFieldsData[key] === ''
-      );
-
-      if (fieldsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
-          .delete()
-          .eq('lead_id', leadId)
-          .in('field_key', fieldsToDelete);
-
-        if (deleteError) throw deleteError;
-      }
-
-      if (upsertPromises.length > 0) {
-        const results = await Promise.all(upsertPromises);
-        
-        for (const result of results) {
-          if (result.error) throw result.error;
-        }
-      }
-
-      console.log('Custom fields saved successfully');
-      return { success: true };
-
-    } catch (error) {
-      console.error('Error saving custom fields:', error);
-      
-      if (error.message && error.message.includes('Maximum 5 custom fields allowed')) {
-        throw new Error('Maximum 5 custom fields allowed per lead');
-      }
-      
-      throw error;
-    }
-  },
-
-  async getActiveCustomFieldDefinitions() {
-    try {
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.SETTINGS)
-        .select('*')
-        .eq('type', 'form_fields')
-        .eq('is_active', true);
-        
-      if (error) throw error;
-
-      const customFields = data?.filter(field => {
-        return this.isCustomFieldByKey(field.field_key) || 
-               this.isCustomField(field.name);
-      }) || [];
-
-      return customFields;
-    } catch (error) {
-      console.error('Error fetching custom field definitions:', error);
-      throw error;
-    }
-  },
-
-  async deleteAllCustomFieldsForLead(leadId) {
-    try {
-      const { error } = await supabase
-        .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
-        .delete()
-        .eq('lead_id', leadId);
-        
-      if (error) throw error;
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Error deleting custom fields for lead:', error);
-      throw error;
-    }
-  },
-
-  async getCustomFieldsCountForLead(leadId) {
-    try {
-      const { data, error } = await supabase
-        .from(TABLE_NAMES.LEAD_CUSTOM_FIELDS)
+      const { data: existing, error: fetchError } = await supabase
+        .from(TABLE_NAMES.CUSTOM_FIELD_VALUES)
         .select('id')
-        .eq('lead_id', leadId);
+        .eq('lead_id', leadId)
+        .eq('field_key', fieldKey)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (existing) {
+        const { error } = await supabase
+          .from(TABLE_NAMES.CUSTOM_FIELD_VALUES)
+          .update({ value: value })
+          .eq('id', existing.id);
         
-      if (error) throw error;
-      
-      return data?.length || 0;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from(TABLE_NAMES.CUSTOM_FIELD_VALUES)
+          .insert([{
+            lead_id: leadId,
+            field_key: fieldKey,
+            value: value
+          }]);
+        
+        if (error) throw error;
+      }
+
+      return { success: true };
     } catch (error) {
-      console.error('Error counting custom fields for lead:', error);
+      console.error('Error saving custom field value:', error);
       throw error;
     }
   },
 
-  async fixCustomFieldKeys() {
+  async ensureCustomFieldKeysExist() {
     try {
       const { data: customFields, error } = await supabase
         .from(TABLE_NAMES.SETTINGS)
         .select('*')
         .eq('type', 'form_fields')
-        .eq('is_custom', true);
-        
+        .eq('is_active', true);
+
       if (error) throw error;
-      
-      const fixPromises = customFields
-        .filter(field => !field.field_key)
+
+      const fieldsNeedingKeys = customFields.filter(field => 
+        this.isCustomFieldByKey(field.field_key) && !field.field_key
+      );
+
+      const fixPromises = fieldsNeedingKeys
         .map(field => {
-          const fieldKey = 'custom_field_' + field.id;
+          const fieldKey = 'custom_' + field.name.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now();
           
           return supabase
             .from(TABLE_NAMES.SETTINGS)
@@ -986,6 +871,11 @@ export const settingsService = {
       .eq('type', type)
       .order('sort_order', { ascending: false })
       .limit(1);
+      
+    return data?.[0]?.sort_order || 0;
+  }
+};
+
       
     return data?.[0]?.sort_order || 0;
   }
