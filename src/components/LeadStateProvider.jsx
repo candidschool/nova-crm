@@ -13,13 +13,40 @@ const useLeadState = () => {
   return context;
 };
 
-// LeadStateProvider component
-const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
-  const [selectedLead, setSelectedLead] = useState(null);
-  const [leadsData, setLeadsDataInternal] = useState([]); // ← Rename internal state
-  const [allLeadsData, setAllLeadsData] = useState([]); // ← Store unfiltered data
+// Permission helper functions
+const canViewAllLeads = (userRole) => {
+  return userRole === 'admin' || userRole === 'jr_counselor';
+};
 
-  // ← NEW: Role-based filtering function
+const canEditLead = (userRole, lead, userName) => {
+  if (userRole === 'admin') return true;
+  if (userRole === 'user') return lead.counsellor === userName; // Counselor - only own leads
+  if (userRole === 'jr_counselor') return false; // Read-only
+  if (userRole === 'outsider') return false; // Read-only
+  return false;
+};
+
+const canDeleteLeads = (userRole) => {
+  return userRole === 'admin'; // Only admin can delete
+};
+
+const canAddLeads = (userRole) => {
+  return true; // All roles can add leads
+};
+
+const canReassignLeads = (userRole, lead, userName) => {
+  if (userRole === 'admin') return true; // Admin can reassign any lead
+  if (userRole === 'user') return lead.counsellor === userName; // Counselor can reassign own leads
+  return false; // Jr. Counselor and Outsider cannot reassign
+};
+
+// LeadStateProvider component
+const LeadStateProvider = ({ children, user }) => {
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [leadsData, setLeadsDataInternal] = useState([]);
+  const [allLeadsData, setAllLeadsData] = useState([]);
+
+  // Role-based filtering function
   const applyRoleBasedFilter = useCallback((leads) => {
     if (!user) {
       console.log('No user provided, returning empty array');
@@ -31,13 +58,13 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
     console.log('User role:', user.role);
     console.log('Total leads before filtering:', leads.length);
 
-    // Admin sees all leads
-    if (user.role === 'admin') {
-      console.log('Admin user - showing all leads');
+    // Admin and Jr. Counselor see all leads
+    if (canViewAllLeads(user.role)) {
+      console.log(`${user.role} user - showing all leads`);
       return leads;
     }
 
-    // Regular users see only their assigned leads
+    // Counselor (user) and Outsider see only their assigned leads
     const filteredLeads = leads.filter(lead => {
       const isAssigned = lead.counsellor === user.full_name;
       if (!isAssigned) {
@@ -46,13 +73,13 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
       return isAssigned;
     });
 
-    console.log(`Regular user - filtered to ${filteredLeads.length} leads assigned to ${user.full_name}`);
+    console.log(`${user.role} user - filtered to ${filteredLeads.length} leads assigned to ${user.full_name}`);
     return filteredLeads;
   }, [user]);
 
-  // ← NEW: Wrapper for setLeadsData that applies role-based filtering
+  // Wrapper for setLeadsData that applies role-based filtering
   const setLeadsData = useCallback((leads) => {
-    console.log('setLeadsData called with:', leads.length, TABLE_NAMES.LEADS);
+    console.log('setLeadsData called with:', leads.length, 'leads');
     
     // Store all leads (unfiltered) for admin operations
     setAllLeadsData(leads);
@@ -102,13 +129,13 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
     }
   }, [selectedLead, updateLeadInList, updateSelectedLead]);
 
-  // ← UPDATED: Handle action status updates with field_key awareness
+  // Handle action status updates with field_key awareness
   const updateActionStatus = useCallback((leadId, stageField, newStatus) => {
     const updateFields = { [stageField]: newStatus };
     updateLead(leadId, updateFields);
   }, [updateLead]);
 
-  // ← UPDATED: Handle complete lead updates with field_key and stage_key support + FIXED secondPhone
+  // Handle complete lead updates with field_key and stage_key support
   const updateCompleteLeadData = useCallback((leadId, formData, getScoreFromStage, getCategoryFromStage, getStageKeyFromName, getStageDisplayName) => {
     // Format phone number properly
     let formattedPhone = formData.phone;
@@ -117,86 +144,64 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
       formattedPhone = `+91${formattedPhone}`;
     }
 
-    // ← NEW: Format secondary phone number properly
+    // Format secondary phone number properly
     let formattedSecondPhone = formData.secondPhone;
     if (formattedSecondPhone && !formattedSecondPhone.startsWith('+91')) {
       formattedSecondPhone = formattedSecondPhone.replace(/^\+91/, '');
       formattedSecondPhone = `+91${formattedSecondPhone}`;
     }
 
-    // ← NEW: Handle stage_key conversion
+    // Handle stage_key conversion
     let stageKey = formData.stage;
     let stageDisplayName = formData.stage;
 
     if (getStageKeyFromName && getStageDisplayName) {
-      // If stage is a display name, convert to stage_key
       const convertedStageKey = getStageKeyFromName(formData.stage);
       if (convertedStageKey) {
         stageKey = convertedStageKey;
         stageDisplayName = getStageDisplayName(stageKey);
       } else {
-        // It's already a stage_key, get display name
         stageDisplayName = getStageDisplayName(formData.stage);
       }
     }
 
-    // ← UPDATED: Complete field mapping with field_key support + ADDED secondPhone
+    // Complete field mapping
     const updatedFields = {
-      // ← Core identity fields (field_key: parentsName, kidsName, phone, email)
       parentsName: formData.parentsName,
       kidsName: formData.kidsName, 
       phone: formattedPhone,
-      secondPhone: formattedSecondPhone, // ← NEW: Added secondPhone field support
+      secondPhone: formattedSecondPhone,
       email: formData.email,
-
-      // ← Basic lead fields (field_key: grade, source, counsellor)  
       grade: formData.grade,
       source: formData.source,
       counsellor: formData.counsellor,
-
-      // ← Stage handling with stage_key support
-      stage: stageKey, // ← Store stage_key internally
-      stageDisplayName: stageDisplayName, // ← Store display name for UI
-
-      // ← Additional info fields (field_key: occupation, location, currentSchool, offer)
+      stage: stageKey,
+      stageDisplayName: stageDisplayName,
       occupation: formData.occupation,
       location: formData.location,
       currentSchool: formData.currentSchool,
       offer: formData.offer,
-
-      // ← Meeting fields (field_key: meetingDate, meetingTime, meetingLink)
       meetingDate: formData.meetingDate,
       meetingTime: formData.meetingTime,
       meetingLink: formData.meetingLink,
-
-      // ← Visit fields (field_key: visitDate, visitTime, visitLocation)
       visitDate: formData.visitDate,
       visitTime: formData.visitTime,
       visitLocation: formData.visitLocation,
-
-      // ← Admission fields (field_key: registrationFees, enrolled)
       registrationFees: formData.registrationFees,
       enrolled: formData.enrolled,
-
-      // ← Additional fields (field_key: notes)
-      notes: formData.notes, // ← NEW: Added notes field support
-
-      // ← Dynamic scoring using stage_key
+      notes: formData.notes,
       score: getScoreFromStage ? getScoreFromStage(stageKey) : 20,
       category: getCategoryFromStage ? getCategoryFromStage(stageKey) : 'New'
     };
 
     console.log('=== LEAD STATE UPDATE ===');
     console.log('Lead ID:', leadId);
-    console.log('Form Data:', formData);
-    console.log('Stage Key:', stageKey);
-    console.log('Stage Display Name:', stageDisplayName);
     console.log('Updated Fields:', updatedFields);
 
     updateLead(leadId, updatedFields);
   }, [updateLead]);
 
-  // ← NEW: Handle field value updates with field_key awareness
+  // Handle field value updates with field_key awareness
   const updateLeadField = useCallback((leadId, fieldKey, fieldValue, fieldLabel) => {
     console.log('=== FIELD UPDATE ===');
     console.log(`Updating field ${fieldKey} (${fieldLabel}) to:`, fieldValue);
@@ -205,7 +210,7 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
     updateLead(leadId, updateFields);
   }, [updateLead]);
 
-  // ← NEW: Handle stage updates with stage_key support
+  // Handle stage updates with stage_key support
   const updateLeadStage = useCallback((leadId, stageKey, getScoreFromStage, getCategoryFromStage, getStageDisplayName) => {
     console.log('=== STAGE UPDATE ===');
     console.log(`Updating lead ${leadId} stage to:`, stageKey);
@@ -225,26 +230,20 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
     updateLead(leadId, updateFields);
   }, [updateLead]);
 
-  // ← NEW: Batch update multiple fields with field_key support
+  // Batch update multiple fields with field_key support
   const updateLeadFields = useCallback((leadId, fieldsObject, fieldMappings) => {
     console.log('=== BATCH FIELD UPDATE ===');
     console.log('Lead ID:', leadId);
     console.log('Fields Object:', fieldsObject);
-    console.log('Field Mappings:', fieldMappings);
 
-    // Convert display names to field keys if mappings provided
     const updateFields = {};
     
     Object.entries(fieldsObject).forEach(([key, value]) => {
-      // Check if this is a display name that needs conversion
       if (fieldMappings && fieldMappings[key]) {
         const fieldKey = fieldMappings[key];
         updateFields[fieldKey] = value;
-        console.log(`Mapped "${key}" → "${fieldKey}": ${value}`);
       } else {
-        // Use as-is (probably already a field key)
         updateFields[key] = value;
-        console.log(`Direct field "${key}": ${value}`);
       }
     });
 
@@ -255,25 +254,30 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
   const value = {
     // State
     selectedLead,
-    leadsData, // ← This is now filtered data based on user role
-    allLeadsData, // ← NEW: Unfiltered data (for admin operations if needed)
-    user, // ← NEW: Expose user for components that need it
+    leadsData, // Filtered data based on user role
+    allLeadsData, // Unfiltered data (for admin operations)
+    user, // User object with role
     
     // Setters
     setSelectedLead,
-    setLeadsData, // ← This now applies role-based filtering automatically
+    setLeadsData, // Applies role-based filtering automatically
     
-    // ← EXISTING: Update functions
+    // Update functions
     updateLead,
     updateActionStatus,
     updateCompleteLeadData,
     updateSelectedLead,
     updateLeadInList,
+    updateLeadField,
+    updateLeadStage,
+    updateLeadFields,
 
-    // ← NEW: Field_key and stage_key aware update functions
-    updateLeadField,        // Update single field with field_key awareness
-    updateLeadStage,        // Update stage with stage_key support  
-    updateLeadFields        // Batch update with field_key mapping
+    // Permission helper functions
+    canViewAllLeads: () => canViewAllLeads(user?.role),
+    canEditLead: (lead) => canEditLead(user?.role, lead, user?.full_name),
+    canDeleteLeads: () => canDeleteLeads(user?.role),
+    canAddLeads: () => canAddLeads(user?.role),
+    canReassignLeads: (lead) => canReassignLeads(user?.role, lead, user?.full_name)
   };
 
   return (
@@ -284,4 +288,4 @@ const LeadStateProvider = ({ children, user }) => { // ← NEW: Accept user prop
 };
 
 export default LeadStateProvider;
-export {useLeadState};
+export { useLeadState, canViewAllLeads, canEditLead, canDeleteLeads, canAddLeads, canReassignLeads };
