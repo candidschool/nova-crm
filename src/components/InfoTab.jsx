@@ -8,14 +8,17 @@ import { cancelReminders } from '../utils/api';
 const InfoTab = ({
   selectedLead,
   isEditingMode,
-  sidebarFormData,
+  formData,
   onFieldChange,
+  stages,
   settingsData,
-  getFieldLabel,
-  customFieldsData = {},
-  onCustomFieldChange,
-  onRefreshLead,
-  onRefreshSingleLead
+  getStageColor,
+  canEdit = true,
+  canReassign = true,
+  customFieldsData = {},      // ✅ ADDED
+  onCustomFieldChange,        // ✅ ADDED
+  onRefreshSingleLead,        // ✅ ADDED
+  getFieldLabel               // ✅ ADDED (was missing)
 }) => {
   
   const [showMeetingConfirmation, setShowMeetingConfirmation] = useState(false);
@@ -31,7 +34,7 @@ const InfoTab = ({
   const sources = settingsData?.sources?.map(source => source.name) || ['Instagram'];
   const grades = settingsData?.grades?.map(grade => grade.name) || ['LKG'];
 
- const hasDateTimePassed = (date, time) => {
+  const hasDateTimePassed = (date, time) => {
     if (!date || !time || date === '' || time === '') {
       console.log('hasDateTimePassed: Missing date or time', { date, time });
       return false;
@@ -66,9 +69,9 @@ const InfoTab = ({
     console.log('=== CONFIRMATION CHECK ===');
     console.log('isEditingMode:', isEditingMode);
     
-    // MEETING CHECK
-    const meetingDate = sidebarFormData.meetingDate || selectedLead.meetingDate;
-    const meetingTime = sidebarFormData.meetingTime || selectedLead.meetingTime;
+    // MEETING CHECK - ✅ FIXED: Changed FormData to formData (lowercase)
+    const meetingDate = formData.meetingDate || selectedLead.meetingDate;
+    const meetingTime = formData.meetingTime || selectedLead.meetingTime;
     
     console.log('Meeting Date:', meetingDate, 'Meeting Time:', meetingTime);
     
@@ -84,9 +87,9 @@ const InfoTab = ({
       setShowMeetingConfirmation(false);
     }
     
-    // VISIT CHECK
-    const visitDate = sidebarFormData.visitDate || selectedLead.visitDate;
-    const visitTime = sidebarFormData.visitTime || selectedLead.visitTime;
+    // VISIT CHECK - ✅ FIXED: Changed FormData to formData (lowercase)
+    const visitDate = formData.visitDate || selectedLead.visitDate;
+    const visitTime = formData.visitTime || selectedLead.visitTime;
     
     console.log('Visit Date:', visitDate, 'Visit Time:', visitTime);
     
@@ -109,10 +112,10 @@ const InfoTab = ({
     selectedLead?.visitDate,
     selectedLead?.visitTime,
     selectedLead?.visit_confirmed,
-    sidebarFormData.meetingDate,
-    sidebarFormData.meetingTime,
-    sidebarFormData.visitDate,
-    sidebarFormData.visitTime,
+    formData.meetingDate,  // ✅ FIXED: Changed FormData to formData
+    formData.meetingTime,  // ✅ FIXED: Changed FormData to formData
+    formData.visitDate,    // ✅ FIXED: Changed FormData to formData
+    formData.visitTime,    // ✅ FIXED: Changed FormData to formData
     isEditingMode
   ]);
 
@@ -166,7 +169,7 @@ const InfoTab = ({
         }
 
         setShowMeetingConfirmation(false);
-        setMeetingConfirmed(true);
+        // Don't set meetingConfirmed to true when clicking No
         
         onFieldChange('meetingDate', '');
         onFieldChange('meetingTime', '');
@@ -234,7 +237,7 @@ const InfoTab = ({
         }
 
         setShowVisitConfirmation(false);
-        setVisitConfirmed(true);
+        // Don't set visitConfirmed to true when clicking No
         
         onFieldChange('visitDate', '');
         onFieldChange('visitTime', '');
@@ -411,7 +414,7 @@ const InfoTab = ({
               ) : (
                 <input 
                   type="text" 
-                  value={sidebarFormData.parentsName !== undefined ? sidebarFormData.parentsName : (selectedLead?.parentsName === 'NA' || selectedLead?.parentsName === 'NULL' ? '' : (selectedLead?.parentsName || ''))} 
+                  value={formData.parentsName !== undefined ? formData.parentsName : (selectedLead?.parentsName === 'NA' || selectedLead?.parentsName === 'NULL' ? '' : (selectedLead?.parentsName || ''))} 
                   onChange={(e) => onFieldChange('parentsName', e.target.value)}
                   placeholder="Enter parent name"
                   className="lead-sidebar-form-input"
@@ -426,7 +429,7 @@ const InfoTab = ({
               ) : (
                 <div className="input-group">
                   <span className="input-group-text" style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRight: 'none', padding: '8px 12px', fontSize: '14px' }}>+91</span>
-                  <input type="text" value={formatPhoneForDisplay(sidebarFormData.phone || selectedLead?.phone || '')} onChange={(e) => handlePhoneChange('phone', e.target.value)} placeholder="Enter 10-digit number" maxLength="10" className="lead-sidebar-form-input" style={{ borderLeft: 'none' }} />
+                  <input type="text" value={formatPhoneForDisplay(formData.phone || selectedLead?.phone || '')} onChange={(e) => handlePhoneChange('phone', e.target.value)} placeholder="Enter 10-digit number" maxLength="10" className="lead-sidebar-form-input" style={{ borderLeft: 'none' }} />
                 </div>
               )}
             </div>
@@ -434,11 +437,11 @@ const InfoTab = ({
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('secondPhone')}</label>
               {!isEditingMode ? (
-                <div className="lead-sidebar-field-value">{selectedLead?.secondPhone || sidebarFormData.secondPhone || ''}</div>
+                <div className="lead-sidebar-field-value">{selectedLead?.secondPhone || formData.secondPhone || ''}</div>
               ) : (
                 <div className="input-group">
                   <span className="input-group-text" style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRight: 'none', padding: '8px 12px', fontSize: '14px' }}>+91</span>
-                  <input type="text" value={formatPhoneForDisplay(sidebarFormData.secondPhone || selectedLead?.secondPhone || '')} onChange={(e) => handlePhoneChange('secondPhone', e.target.value)} placeholder={`Enter 10-digit ${getFieldLabel('secondPhone').toLowerCase()} (optional)`} maxLength="10" className="lead-sidebar-form-input" style={{ borderLeft: 'none' }} />
+                  <input type="text" value={formatPhoneForDisplay(formData.secondPhone || selectedLead?.secondPhone || '')} onChange={(e) => handlePhoneChange('secondPhone', e.target.value)} placeholder={`Enter 10-digit ${getFieldLabel('secondPhone').toLowerCase()} (optional)`} maxLength="10" className="lead-sidebar-form-input" style={{ borderLeft: 'none' }} />
                 </div>
               )}
             </div>
@@ -446,18 +449,18 @@ const InfoTab = ({
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">Email</label>
               {!isEditingMode ? (
-                <div className="lead-sidebar-field-value">{sidebarFormData.email || ''}</div>
+                <div className="lead-sidebar-field-value">{formData.email || ''}</div>
               ) : (
-                <input type="email" value={sidebarFormData.email || ''} onChange={(e) => onFieldChange('email', e.target.value)} placeholder="Enter email" className="lead-sidebar-form-input" />
+                <input type="email" value={formData.email || ''} onChange={(e) => onFieldChange('email', e.target.value)} placeholder="Enter email" className="lead-sidebar-form-input" />
               )}
             </div>
 
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('occupation')}</label>
               {!isEditingMode ? (
-                <div className="lead-sidebar-field-value">{(sidebarFormData.occupation === 'NULL' || !sidebarFormData.occupation) ? '' : sidebarFormData.occupation}</div>
+                <div className="lead-sidebar-field-value">{(formData.occupation === 'NULL' || !formData.occupation) ? '' : formData.occupation}</div>
               ) : (
-                <input type="text" value={sidebarFormData.occupation || ''} onChange={(e) => onFieldChange('occupation', e.target.value)} placeholder={`Enter ${getFieldLabel('occupation').toLowerCase()}`} className="lead-sidebar-form-input" />
+                <input type="text" value={formData.occupation || ''} onChange={(e) => onFieldChange('occupation', e.target.value)} placeholder={`Enter ${getFieldLabel('occupation').toLowerCase()}`} className="lead-sidebar-form-input" />
               )}
             </div>
 
@@ -466,7 +469,7 @@ const InfoTab = ({
               {!isEditingMode ? (
                 <div className="lead-sidebar-field-value">{selectedLead?.source || sources[0] || 'Instagram'}</div>
               ) : (
-                <select value={sidebarFormData.source || selectedLead?.source || sources[0] || 'Instagram'} onChange={(e) => onFieldChange('source', e.target.value)} className="lead-sidebar-form-select">
+                <select value={formData.source || selectedLead?.source || sources[0] || 'Instagram'} onChange={(e) => onFieldChange('source', e.target.value)} className="lead-sidebar-form-select">
                   {sources.map(source => (
                     <option key={source} value={source}>{source}</option>
                   ))}
@@ -489,7 +492,7 @@ const InfoTab = ({
               {!isEditingMode ? (
                 <div className="lead-sidebar-field-value">{selectedLead?.kidsName === 'NA' || selectedLead?.kidsName === 'NULL' ? '' : (selectedLead?.kidsName || '')}</div>
               ) : (
-                <input type="text" value={sidebarFormData.kidsName !== undefined ? sidebarFormData.kidsName : (selectedLead?.kidsName === 'NA' || selectedLead?.kidsName === 'NULL' ? '' : (selectedLead?.kidsName || ''))} onChange={(e) => onFieldChange('kidsName', e.target.value)} placeholder="Enter kid name" className="lead-sidebar-form-input" />
+                <input type="text" value={formData.kidsName !== undefined ? formData.kidsName : (selectedLead?.kidsName === 'NA' || selectedLead?.kidsName === 'NULL' ? '' : (selectedLead?.kidsName || ''))} onChange={(e) => onFieldChange('kidsName', e.target.value)} placeholder="Enter kid name" className="lead-sidebar-form-input" />
               )}
             </div>
 
@@ -498,7 +501,7 @@ const InfoTab = ({
               {!isEditingMode ? (
                 <div className="lead-sidebar-field-value">{selectedLead?.grade || ''}</div>
               ) : (
-                <select value={sidebarFormData.grade || selectedLead?.grade || grades[0] || 'LKG'} onChange={(e) => onFieldChange('grade', e.target.value)} className="lead-sidebar-form-select">
+                <select value={formData.grade || selectedLead?.grade || grades[0] || 'LKG'} onChange={(e) => onFieldChange('grade', e.target.value)} className="lead-sidebar-form-select">
                   {grades.map(grade => (
                     <option key={grade} value={grade}>{grade}</option>
                   ))}
@@ -509,18 +512,18 @@ const InfoTab = ({
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('location')}</label>
               {!isEditingMode ? (
-                <div className="lead-sidebar-field-value">{sidebarFormData.location || ''}</div>
+                <div className="lead-sidebar-field-value">{formData.location || ''}</div>
               ) : (
-                <input type="text" value={sidebarFormData.location || ''} onChange={(e) => onFieldChange('location', e.target.value)} placeholder={`Enter ${getFieldLabel('location').toLowerCase()}`} className="lead-sidebar-form-input" />
+                <input type="text" value={formData.location || ''} onChange={(e) => onFieldChange('location', e.target.value)} placeholder={`Enter ${getFieldLabel('location').toLowerCase()}`} className="lead-sidebar-form-input" />
               )}
             </div>
 
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('currentSchool')}</label>
               {!isEditingMode ? (
-                <div className="lead-sidebar-field-value">{(sidebarFormData.currentSchool === 'NULL' || !sidebarFormData.currentSchool) ? '' : sidebarFormData.currentSchool}</div>
+                <div className="lead-sidebar-field-value">{(formData.currentSchool === 'NULL' || !formData.currentSchool) ? '' : formData.currentSchool}</div>
               ) : (
-                <input type="text" value={sidebarFormData.currentSchool || ''} onChange={(e) => onFieldChange('currentSchool', e.target.value)} placeholder={`Enter ${getFieldLabel('currentSchool').toLowerCase()}`} className="lead-sidebar-form-input" />
+                <input type="text" value={formData.currentSchool || ''} onChange={(e) => onFieldChange('currentSchool', e.target.value)} placeholder={`Enter ${getFieldLabel('currentSchool').toLowerCase()}`} className="lead-sidebar-form-input" />
               )}
             </div>
           </div>
@@ -546,15 +549,15 @@ const InfoTab = ({
             <div style={{ flex: 1 }}>
               <div className="lead-sidebar-form-row">
                 <label className="lead-sidebar-form-label">{getFieldLabel('meetingDate')}</label>
-                {!isEditingMode ? (<div className="lead-sidebar-field-value">{sidebarFormData.meetingDate || ''}</div>) : (<input type="date" value={sidebarFormData.meetingDate || ''} onChange={(e) => onFieldChange('meetingDate', e.target.value)} className="lead-sidebar-form-input" />)}
+                {!isEditingMode ? (<div className="lead-sidebar-field-value">{formData.meetingDate || ''}</div>) : (<input type="date" value={formData.meetingDate || ''} onChange={(e) => onFieldChange('meetingDate', e.target.value)} className="lead-sidebar-form-input" />)}
               </div>
               <div className="lead-sidebar-form-row">
                 <label className="lead-sidebar-form-label">{getFieldLabel('meetingTime')}</label>
-                {!isEditingMode ? (<div className="lead-sidebar-field-value">{sidebarFormData.meetingTime || ''}</div>) : (<input type="time" value={sidebarFormData.meetingTime || ''} onChange={(e) => onFieldChange('meetingTime', e.target.value)} className="lead-sidebar-form-input" />)}
+                {!isEditingMode ? (<div className="lead-sidebar-field-value">{formData.meetingTime || ''}</div>) : (<input type="time" value={formData.meetingTime || ''} onChange={(e) => onFieldChange('meetingTime', e.target.value)} className="lead-sidebar-form-input" />)}
               </div>
               <div className="lead-sidebar-form-row">
                 <label className="lead-sidebar-form-label">{getFieldLabel('meetingLink')}</label>
-                {!isEditingMode ? (<div className="lead-sidebar-field-value">{(sidebarFormData.meetingLink === 'NULL' || !sidebarFormData.meetingLink) ? '' : (<a href={sidebarFormData.meetingLink} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff', textDecoration: 'underline' }}>{sidebarFormData.meetingLink}</a>)}</div>) : (<input type="text" value={sidebarFormData.meetingLink || ''} onChange={(e) => onFieldChange('meetingLink', e.target.value)} placeholder={`Enter ${getFieldLabel('meetingLink').toLowerCase()}`} className="lead-sidebar-form-input" />)}
+                {!isEditingMode ? (<div className="lead-sidebar-field-value">{(formData.meetingLink === 'NULL' || !formData.meetingLink) ? '' : (<a href={formData.meetingLink} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff', textDecoration: 'underline' }}>{formData.meetingLink}</a>)}</div>) : (<input type="text" value={formData.meetingLink || ''} onChange={(e) => onFieldChange('meetingLink', e.target.value)} placeholder={`Enter ${getFieldLabel('meetingLink').toLowerCase()}`} className="lead-sidebar-form-input" />)}
               </div>
             </div>
           </div>
@@ -580,15 +583,15 @@ const InfoTab = ({
             <div style={{ flex: 1 }}>
               <div className="lead-sidebar-form-row">
                 <label className="lead-sidebar-form-label">{getFieldLabel('visitDate')}</label>
-                {!isEditingMode ? (<div className="lead-sidebar-field-value">{sidebarFormData.visitDate || ''}</div>) : (<input type="date" value={sidebarFormData.visitDate || ''} onChange={(e) => onFieldChange('visitDate', e.target.value)} className="lead-sidebar-form-input" />)}
+                {!isEditingMode ? (<div className="lead-sidebar-field-value">{formData.visitDate || ''}</div>) : (<input type="date" value={formData.visitDate || ''} onChange={(e) => onFieldChange('visitDate', e.target.value)} className="lead-sidebar-form-input" />)}
               </div>
               <div className="lead-sidebar-form-row">
                 <label className="lead-sidebar-form-label">{getFieldLabel('visitTime')}</label>
-                {!isEditingMode ? (<div className="lead-sidebar-field-value">{sidebarFormData.visitTime || ''}</div>) : (<input type="time" value={sidebarFormData.visitTime || ''} onChange={(e) => onFieldChange('visitTime', e.target.value)} className="lead-sidebar-form-input" />)}
+                {!isEditingMode ? (<div className="lead-sidebar-field-value">{formData.visitTime || ''}</div>) : (<input type="time" value={formData.visitTime || ''} onChange={(e) => onFieldChange('visitTime', e.target.value)} className="lead-sidebar-form-input" />)}
               </div>
               <div className="lead-sidebar-form-row">
                 <label className="lead-sidebar-form-label">{getFieldLabel('visitLocation')}</label>
-                {!isEditingMode ? (<div className="lead-sidebar-field-value">{(sidebarFormData.visitLocation === 'NULL' || !sidebarFormData.visitLocation) ? '' : sidebarFormData.visitLocation}</div>) : (<input type="text" value={sidebarFormData.visitLocation || ''} onChange={(e) => onFieldChange('visitLocation', e.target.value)} placeholder={`Enter ${getFieldLabel('visitLocation').toLowerCase()}`} className="lead-sidebar-form-input" />)}
+                {!isEditingMode ? (<div className="lead-sidebar-field-value">{(formData.visitLocation === 'NULL' || !formData.visitLocation) ? '' : formData.visitLocation}</div>) : (<input type="text" value={formData.visitLocation || ''} onChange={(e) => onFieldChange('visitLocation', e.target.value)} placeholder={`Enter ${getFieldLabel('visitLocation').toLowerCase()}`} className="lead-sidebar-form-input" />)}
               </div>
             </div>
           </div>
@@ -604,11 +607,11 @@ const InfoTab = ({
           <div className="lead-sidebar-section-content">
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('registrationFees')}</label>
-              {!isEditingMode ? (<div className={`lead-sidebar-status-badge ${sidebarFormData.registrationFees === 'Paid' ? 'paid' : 'unpaid'}`}>{(sidebarFormData.registrationFees === 'NULL' || !sidebarFormData.registrationFees) ? 'Not Paid' : sidebarFormData.registrationFees}</div>) : (<select value={sidebarFormData.registrationFees || 'Not Paid'} onChange={(e) => onFieldChange('registrationFees', e.target.value)} className="lead-sidebar-form-select"><option value="Not Paid">Not Paid</option><option value="Paid">Paid</option></select>)}
+              {!isEditingMode ? (<div className={`lead-sidebar-status-badge ${formData.registrationFees === 'Paid' ? 'paid' : 'unpaid'}`}>{(formData.registrationFees === 'NULL' || !formData.registrationFees) ? 'Not Paid' : formData.registrationFees}</div>) : (<select value={formData.registrationFees || 'Not Paid'} onChange={(e) => onFieldChange('registrationFees', e.target.value)} className="lead-sidebar-form-select"><option value="Not Paid">Not Paid</option><option value="Paid">Paid</option></select>)}
             </div>
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('enrolled')}</label>
-              {!isEditingMode ? (<div className={`lead-sidebar-status-badge ${sidebarFormData.enrolled === 'Yes' ? 'paid' : 'unpaid'}`}>{(sidebarFormData.enrolled === 'NULL' || !sidebarFormData.enrolled) ? 'No' : sidebarFormData.enrolled}</div>) : (<select value={sidebarFormData.enrolled || 'No'} onChange={(e) => onFieldChange('enrolled', e.target.value)} className="lead-sidebar-form-select"><option value="No">No</option><option value="Yes">Yes</option></select>)}
+              {!isEditingMode ? (<div className={`lead-sidebar-status-badge ${formData.enrolled === 'Yes' ? 'paid' : 'unpaid'}`}>{(formData.enrolled === 'NULL' || !formData.enrolled) ? 'No' : formData.enrolled}</div>) : (<select value={formData.enrolled || 'No'} onChange={(e) => onFieldChange('enrolled', e.target.value)} className="lead-sidebar-form-select"><option value="No">No</option><option value="Yes">Yes</option></select>)}
             </div>
           </div>
         </div>
@@ -623,7 +626,25 @@ const InfoTab = ({
           <div className="lead-sidebar-section-content">
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">{getFieldLabel('counsellor')}</label>
-              {!isEditingMode ? (<div className="lead-sidebar-field-value">{sidebarFormData.counsellor || selectedLead?.counsellor || 'Not Assigned'}</div>) : (<select value={sidebarFormData.counsellor || ''} onChange={(e) => onFieldChange('counsellor', e.target.value)} className="lead-sidebar-form-select"><option value="">Select your {getFieldLabel('counsellor')}</option>{settingsData?.counsellors?.map(counsellor => (<option key={counsellor.id} value={counsellor.name}>{counsellor.name}</option>))}</select>)}
+              {!isEditingMode ? (
+                <div className="lead-sidebar-field-value">
+                  {formData.counsellor || selectedLead?.counsellor || 'Not Assigned'}
+                </div>
+              ) : (
+                <select 
+                  value={formData.counsellor || ''} 
+                  onChange={(e) => onFieldChange('counsellor', e.target.value)} 
+                  className="lead-sidebar-form-select"
+                  disabled={!canReassign}
+                >
+                  <option value="">Select your {getFieldLabel('counsellor')}</option>
+                  {settingsData?.counsellors?.map(counsellor => (
+                    <option key={counsellor.id} value={counsellor.name}>
+                      {counsellor.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
         </div>
@@ -638,7 +659,7 @@ const InfoTab = ({
           <div className="lead-sidebar-section-content">
             <div className="lead-sidebar-form-row">
               <label className="lead-sidebar-form-label">Notes</label>
-              {!isEditingMode ? (<div className="lead-sidebar-field-value" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '200px', overflowY: 'auto', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}>{sidebarFormData.notes || 'No notes available'}</div>) : (<textarea value={sidebarFormData.notes || ''} onChange={(e) => onFieldChange('notes', e.target.value)} placeholder="Enter notes or description about this lead..." className="lead-sidebar-form-input" rows={5} style={{ resize: 'vertical', minHeight: '100px', fontFamily: 'inherit', padding: '8px' }} />)}
+              {!isEditingMode ? (<div className="lead-sidebar-field-value" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '200px', overflowY: 'auto', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #dee2e6' }}>{formData.notes || 'No notes available'}</div>) : (<textarea value={formData.notes || ''} onChange={(e) => onFieldChange('notes', e.target.value)} placeholder="Enter notes or description about this lead..." className="lead-sidebar-form-input" rows={5} style={{ resize: 'vertical', minHeight: '100px', fontFamily: 'inherit', padding: '8px' }} />)}
             </div>
           </div>
         </div>
