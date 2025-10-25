@@ -3,6 +3,7 @@ import { useSettingsData } from '../contexts/SettingsDataProvider';
 import { supabase } from '../lib/supabase';
 import { settingsService } from '../services/settingsService';
 import { TABLE_NAMES } from '../config/tableNames';
+import { Eye } from 'lucide-react';
 import { 
   logAction,
   logMeetingScheduled,
@@ -81,8 +82,11 @@ const LeadSidebar = ({
   getStageColor,
   getCounsellorInitials,
   getScoreFromStage,
-  getCategoryFromStage
-}) => {  
+  getCategoryFromStage,
+  canEdit = true, 
+  canReassign = true, 
+  user
+}) => {
   console.log('selectedLead data:', selectedLead);
   
   // Use the context hook for action status updates
@@ -240,7 +244,9 @@ const LeadSidebar = ({
     
     try {
       console.log('Fetching custom fields for lead:', selectedLead.id);
-      const customFields = await settingsService.getCustomFieldsForLead(selectedLead.id);
+      // Use getCustomFieldsForLeads (plural) with array of IDs
+      const customFieldsMap = await settingsService.getCustomFieldsForLeads([selectedLead.id]);
+      const customFields = customFieldsMap[selectedLead.id] || {};
       console.log('Fetched custom fields:', customFields);
       
       setCustomFieldsData(customFields);
@@ -434,6 +440,8 @@ const LeadSidebar = ({
   // Update function with scheduler integration AND notes logging
   const handleUpdateAllFields = async () => {
     try {
+      console.log('handleUpdateAllFields called with sidebarFormData:', sidebarFormData);
+      
       const changes = {};
       
       // Compare each standard field and track changes
@@ -726,8 +734,7 @@ const LeadSidebar = ({
   }, [isMobile, onClose]);
   
   // Helper to format history descriptions with highlighted current stage
-  // Helper to format history descriptions with highlighted current stage
-const formatHistoryDescription = (description) => {
+  const formatHistoryDescription = (description) => {
   const searchText = 'Current Stage is';
   const startIndex = description.indexOf(searchText);
   
@@ -772,9 +779,6 @@ const formatHistoryDescription = (description) => {
     </>
   );
 };
-  
-
-
 
   if (!showSidebar) return null;
 
@@ -865,7 +869,7 @@ const formatHistoryDescription = (description) => {
 
             {/* Right Column */}
             <div>
-              {/* ✅ STAGE - DISPLAY ONLY (NO DROPDOWN) */}
+              {/* Stage - Display Only */}
               <div className="lead-sidebar-info-row">
                 <label className="lead-sidebar-stage-label">
                   Stage
@@ -961,16 +965,19 @@ const formatHistoryDescription = (description) => {
           {activeTab === 'info' && (
             <InfoTab
               selectedLead={selectedLead}
-              isEditingMode={isEditingMode}
-              sidebarFormData={sidebarFormData}
+              isEditingMode={isEditingMode && canEdit}
+              formData={sidebarFormData}
               onFieldChange={onFieldChange}
+              stages={stages}
               settingsData={settingsData}
-              getFieldLabel={getFieldLabel}
+              getStageColor={getStageColor}
+              canEdit={canEdit}
+              canReassign={canReassign}
               customFieldsData={customFieldsData}
               onCustomFieldChange={handleCustomFieldChange}
-              onRefreshLead={handleRefreshLead}
               onRefreshSingleLead={onRefreshSingleLead}
-             />
+              getFieldLabel={getFieldLabel}
+            />
           )}
 
           {/* Action Tab Content */}
@@ -981,6 +988,7 @@ const formatHistoryDescription = (description) => {
               stageStatuses={stageStatuses}
               onStatusUpdate={handleStatusUpdate}
               getFieldLabel={getFieldLabel}
+              canEdit={canEdit}
             />
           )}
 
@@ -1169,27 +1177,50 @@ const formatHistoryDescription = (description) => {
           {/* Edit/Update Button - Only show for Info tab */}
           {activeTab === 'info' && (
             <div className="lead-sidebar-update-section">
-              {!isEditingMode ? (
-                <button 
-                  onClick={onEditModeToggle}
-                  className="lead-sidebar-update-button"
-                >
-                  <Edit size={isMobile ? 18 : 16} /> Update
-                </button>
+              {canEdit ? (
+                // User has edit permission
+                <>
+                  {!isEditingMode ? (
+                    <button 
+                      onClick={onEditModeToggle}
+                      className="lead-sidebar-update-button"
+                    >
+                      <Edit size={isMobile ? 18 : 16} /> Update
+                    </button>
+                  ) : (
+                    <div className="lead-sidebar-update-buttons">
+                      <button 
+                        onClick={handleUpdateAllFields}
+                        className="primary"
+                      >
+                        Update
+                      </button>
+                      <button 
+                        onClick={onEditModeToggle}
+                        className="secondary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
-                <div className="lead-sidebar-update-buttons">
-                  <button 
-                    onClick={handleUpdateAllFields}
-                    className="primary"
-                  >
-                    Update
-                  </button>
-                  <button 
-                    onClick={onEditModeToggle}
-                    className="secondary"
-                  >
-                    Cancel
-                  </button>
+                // User does NOT have edit permission - show View Only badge
+                <div style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#6b7280',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <Eye size={16} />
+                  View Only
                 </div>
               )}
             </div>
