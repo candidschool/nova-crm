@@ -981,7 +981,7 @@ const [sourceFilters, setSourceFilters] = useState([]);
                 <th>Phone</th>
                 <th className="desktop-only">{getFieldLabel('grade')}</th>
                 <th>Stage</th>
-                <th className="desktop-only">Status</th>
+                <th className="desktop-only">Source</th>
                 <th className="desktop-only">{getFieldLabel('counsellor')}</th>
                 <th>Notes</th>
               </tr>
@@ -1033,7 +1033,7 @@ const [sourceFilters, setSourceFilters] = useState([]);
                     
                     <td>
                       <span className="status-badge-text">
-                        {lead.category}
+                        {lead.source}
                       </span>
                     </td>
                     <td className="counsellor-middle">
