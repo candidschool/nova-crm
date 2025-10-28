@@ -12,7 +12,7 @@ const Stage11ActionButton = ({
   const hasCalledApi = useRef(false);
 
   // ← FIXED PHONE NUMBER for pass00 campaign
-  const FIXED_PHONE_NUMBER = '+918147038260'; // ← CHANGE THIS TO YOUR ACTUAL PHONE NUMBER
+  const FIXED_PHONE_NUMBER = '+919875346683'; // ← CHANGE THIS TO YOUR ACTUAL PHONE NUMBER
 
   // ← Validation function
   const validateParameters = () => {
