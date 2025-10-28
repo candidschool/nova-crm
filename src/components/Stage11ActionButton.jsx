@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 const Stage11ActionButton = ({ 
   leadData,
   onComplete,
-  getFieldLabel // ← Field_key aware label function (optional)
+  getFieldLabel
 }) => {
   console.log('🔵 Stage11ActionButton component rendered!');
   console.log('🔵 leadData received:', leadData);
@@ -12,7 +12,7 @@ const Stage11ActionButton = ({
   const hasCalledApi = useRef(false);
 
   // ← FIXED PHONE NUMBER for pass00 campaign
-  const FIXED_PHONE_NUMBER = '+919875346683'; // ← CHANGE THIS TO YOUR ACTUAL PHONE NUMBER
+  const FIXED_PHONE_NUMBER = '8147038260'; // ← Clean 10-digit number only
 
   // ← Validation function
   const validateParameters = () => {
@@ -50,21 +50,25 @@ const Stage11ActionButton = ({
     return missingParams;
   };
 
+  // ← Clean phone number helper
+  const cleanPhoneNumber = (phone) => {
+    if (!phone) return '';
+    // Remove +91 and any non-digit characters
+    return phone.replace(/^\+91/, '').replace(/\D/g, '');
+  };
+
   // ← API call for pass00 campaign to FIXED phone number
   const makePass00ApiCall = async () => {
     console.log('🟡 Making pass00 API call to FIXED phone number');
     
     try {
+      // ← FIXED: No templateParams since campaign has none
       const requestBody = {
         apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2Q0MyIsIm5hbWUiOiJOb3ZhIEludGVybmF0aW9uYWwgU2Nob29sIiwiYXBwTmFtZSI6IkFpU2Vuc3kiLCJjbGllbnRJZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2QzZCIsImFjdGl2ZVBsYW4iOiJGUkVFX0ZPUkVWRVIiLCJpYXQiOjE3NTQ1Njg4NjR9.-nntqrB_61dj0Pw66AEL_YwN6VvljWf5CtPf2fiALMw',
         campaignName: 'pass00',
-        destination: FIXED_PHONE_NUMBER, // ← Send to FIXED phone number
-        userName: 'Admin', // ← Generic username for fixed recipient
-        templateParams: [
-          leadData.parentsName, 
-          leadData.kidsName, 
-          leadData.phone
-        ]
+        destination: FIXED_PHONE_NUMBER, // ← Clean 10-digit number
+        userName: 'Admin'
+        // ← REMOVED templateParams - campaign has no parameters
       };
 
       console.log('📤 Request body (pass00 to fixed number):', requestBody);
@@ -121,16 +125,16 @@ const Stage11ActionButton = ({
     setIsLoading(true);
     
     try {
-      console.log('═══════════════════════════════════════');
-      console.log('CALLING pass00 campaign to fixed number');
-      console.log('═══════════════════════════════════════');
+      console.log('╔═════════════════════════════════════╗');
+      console.log('  CALLING pass00 campaign to fixed    ');
+      console.log('╚═════════════════════════════════════╝');
       
       const result = await makePass00ApiCall();
       
-      console.log('═══════════════════════════════════════');
-      console.log('pass00 API CALL COMPLETED');
-      console.log('Status:', result.success ? '✅ Success' : '❌ Failed');
-      console.log('═══════════════════════════════════════');
+      console.log('╔═════════════════════════════════════╗');
+      console.log('  pass00 API CALL COMPLETED           ');
+      console.log('  Status:', result.success ? '✅ Success' : '❌ Failed');
+      console.log('╚═════════════════════════════════════╝');
 
       // Notify parent component
       if (onComplete) {
@@ -165,10 +169,8 @@ const Stage11ActionButton = ({
     if (leadData && !hasCalledApi.current) {
       console.log('🔵 leadData exists and API not called yet, calling handleApiCall');
       
-      setTimeout(() => {
-        console.log('🔵 About to call handleApiCall after timeout');
-        handleApiCall();
-      }, 100);
+      // Call immediately without timeout
+      handleApiCall();
     }
   }, [leadData]);
 
