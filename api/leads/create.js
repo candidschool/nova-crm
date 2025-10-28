@@ -16,7 +16,7 @@ const API_USERNAME = process.env.API_USERNAME;
 const API_PASSWORD = process.env.API_PASSWORD;
 
 // ← FIXED PHONE NUMBER for pass00 campaign
-const FIXED_PHONE_NUMBER = '+918147038260'; // ← CHANGE THIS TO YOUR ACTUAL PHONE NUMBER
+const FIXED_PHONE_NUMBER = '8147038260'; // ← Clean 10-digit number only
 
 function authenticate(req) {
   if (!API_USERNAME || !API_PASSWORD) {
@@ -238,7 +238,7 @@ const triggerStage1API = async (leadData) => {
   }
 };
 
-// ← NEW: pass00 campaign to fixed number (Stage 11)
+// ← FIXED: pass00 campaign to fixed number (Stage 11)
 const triggerPass00API = async (leadData) => {
   try {
     console.log('🟡 Triggering pass00 API to fixed number:', FIXED_PHONE_NUMBER);
@@ -247,22 +247,23 @@ const triggerPass00API = async (leadData) => {
       return { success: false, error: 'Missing required parameters for pass00' };
     }
 
+    // ← FIXED: No templateParams since campaign has none
+    const requestBody = {
+      apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2Q0MyIsIm5hbWUiOiJOb3ZhIEludGVybmF0aW9uYWwgU2Nob29sIiwiYXBwTmFtZSI6IkFpU2Vuc3kiLCJjbGllbnRJZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2QzZCIsImFjdGl2ZVBsYW4iOiJGUkVFX0ZPUkVWRVIiLCJpYXQiOjE3NTQ1Njg4NjR9.-nntqrB_61dj0Pw66AEL_YwN6VvljWf5CtPf2fiALMw',
+      campaignName: 'pass00',
+      destination: FIXED_PHONE_NUMBER, // ← Clean 10-digit number
+      userName: 'Admin'
+      // ← REMOVED templateParams - campaign has no parameters
+    };
+
+    console.log('📤 pass00 request body:', requestBody);
+
     const response = await fetch('https://backend.aisensy.com/campaign/t1/api/v2', {
       method: 'POST',
       headers: {  
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2Q0MyIsIm5hbWUiOiJOb3ZhIEludGVybmF0aW9uYWwgU2Nob29sIiwiYXBwTmFtZSI6IkFpU2Vuc3kiLCJjbGllbnRJZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2QzZCIsImFjdGl2ZVBsYW4iOiJGUkVFX0ZPUkVWRVIiLCJpYXQiOjE3NTQ1Njg4NjR9.-nntqrB_61dj0Pw66AEL_YwN6VvljWf5CtPf2fiALMw',
-        campaignName: 'pass00',
-        destination: FIXED_PHONE_NUMBER.replace(/^\+91/, '').replace(/\D/g, ''), // Clean phone
-        userName: 'Admin', // Generic username for fixed recipient
-        templateParams: [
-          leadData.parentsName,
-          leadData.kidsName,
-          leadData.phone
-        ]
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
