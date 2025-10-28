@@ -5,77 +5,75 @@ import { useSettingsData } from '../contexts/SettingsDataProvider';
 import { 
   logLeadCreated
 } from '../utils/historyLogger';
-import Stage1ActionButton from './Stage1ActionButton'; // ← ADD: Import the API component
+import Stage1ActionButton from './Stage1ActionButton'; // ← Import Stage1 API component
+import Stage11ActionButton from './Stage11ActionButton'; // ← Import Stage11 API component
 
 const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
-  // ← UPDATED: Use settings data context with stage_key support
   const { 
     settingsData, 
-    getFieldLabel, // ← NEW: For dynamic field labels
+    getFieldLabel,
     getStageInfo,
     getStageColor,
     getStageScore, 
     getStageCategory,
-    getStageKeyFromName, // ← NEW: Convert stage name to stage_key
-    getStageNameFromKey, // ← NEW: Convert stage_key to stage name
-    stageKeyToDataMapping, // ← NEW: Direct stage data mapping
+    getStageKeyFromName,
+    getStageNameFromKey,
+    stageKeyToDataMapping,
     loading: settingsLoading 
   } = useSettingsData();
 
   const [formData, setFormData] = useState({
-  id: 0, // Will be auto-generated for new leads
-  parentsName: '',
-  kidsName: '',
-  location: '',
-  phone: '',
-  secondPhone: '', // ← NEW: Secondary phone field
-  email: '',
-  grade: '',
-  notes: '',
-  stage: '', // ← Will store stage_key
-  category: 'New',
-  offer: 'No offer',
-  counsellor: 'Assign Counsellor',
-  score: 20,
-  source: '',
-  occupation: '',
-  currentSchool: '', // ← ADD: Current school field
-  createdTime: ''
+    id: 0,
+    parentsName: '',
+    kidsName: '',
+    location: '',
+    phone: '',
+    secondPhone: '',
+    email: '',
+    grade: '',
+    notes: '',
+    stage: '',
+    category: 'New',
+    offer: 'No offer',
+    counsellor: 'Assign Counsellor',
+    score: 20,
+    source: '',
+    occupation: '',
+    currentSchool: '',
+    createdTime: ''
   });
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [newlyCreatedLead, setNewlyCreatedLead] = useState(null); // ← ADD: Track newly created lead for API call
+  const [newlyCreatedLead, setNewlyCreatedLead] = useState(null); // ← For Stage1 API
+  const [newlyCreatedLeadForPass00, setNewlyCreatedLeadForPass00] = useState(null); // ← NEW: For Stage11 API
 
-  // ← NEW: Helper functions for stage_key conversion
+  // ← Track API completion states
+  const [stage1Complete, setStage1Complete] = useState(false);
+  const [stage11Complete, setStage11Complete] = useState(false);
+
   const getStageKeyForLead = (stageValue) => {
-    // If it's already a stage_key, return it
     if (stageKeyToDataMapping[stageValue]) {
       return stageValue;
     }
-    // Otherwise, convert stage name to stage_key
     return getStageKeyFromName(stageValue) || stageValue;
   };
 
   const getStageDisplayName = (stageValue) => {
-    // If it's a stage_key, get the display name
     if (stageKeyToDataMapping[stageValue]) {
       return getStageNameFromKey(stageValue);
     }
-    // Otherwise, it's probably already a stage name
     return stageValue;
   };
 
-  // ← UPDATED: Use useMemo with stage_key support
   const stages = useMemo(() => 
     settingsData.stages.map(stage => ({
-      value: stage.stage_key || stage.name, // ← Use stage_key if available
-      label: stage.name, // ← Display name
+      value: stage.stage_key || stage.name,
+      label: stage.name,
       color: stage.color || '#B3D7FF'
     })), [settingsData.stages]
   );
 
-  // ← UPDATED: Get offers from settings with field_key awareness
   const offers = useMemo(() => {
     const offerField = settingsData.formFields.find(field => 
       field.field_key === 'offer' || field.name === 'Offer'
@@ -85,7 +83,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
       : ['No offer', '30000 Scholarship', '10000 Discount', 'Welcome Kit', 'Accessible Kit'];
   }, [settingsData.formFields]);
 
-  // Get sources from settings
   const sources = useMemo(() => 
     settingsData.sources.length > 0 
       ? settingsData.sources.map(source => source.name)
@@ -93,7 +90,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
     [settingsData.sources]
   );
 
-  // Get grades from settings
   const grades = useMemo(() => 
     settingsData.grades.length > 0 
       ? settingsData.grades.map(grade => grade.name)
@@ -101,7 +97,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
     [settingsData.grades]
   );
 
-  // Get counsellors from settings
   const counsellors = useMemo(() => 
     settingsData.counsellors.length > 0 
       ? ['Assign Counsellor', ...settingsData.counsellors.map(c => c.name)]
@@ -109,13 +104,10 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
     [settingsData.counsellors]
   );
 
-  // ← UPDATED: Reset form when modal opens with stage_key support and mobile scroll fixes
   useEffect(() => {
     if (isOpen && !settingsLoading) {
-      // Lock body scroll on mobile
       document.body.classList.add('modal-open');
       
-      // Set CSS custom property for iOS viewport height fix
       const setViewportHeight = () => {
         const vh = window.innerHeight * 0.01;
         document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -127,75 +119,65 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
       
       const defaultStageKey = stages[0]?.value || '';
       const defaultData = {
-      id: 0,
-      parentsName: '',
-      kidsName: '',
-      location: '',
-      phone: '',
-      secondPhone: '', // ← NEW: Reset secondary phone
-      email: '',
-      grade: settingsData.grades[0]?.name || 'LKG',
-      notes: '',
-      stage: defaultStageKey, // ← Store stage_key
-      category: 'New',
-      offer: 'No offer',
-      counsellor: 'Assign Counsellor',
-      score: 20,
-      source: settingsData.sources[0]?.name || 'Instagram',
-      occupation: '',
-      currentSchool: '', // ← ADD: Reset current school
-      createdTime: ''
+        id: 0,
+        parentsName: '',
+        kidsName: '',
+        location: '',
+        phone: '',
+        secondPhone: '',
+        email: '',
+        grade: settingsData.grades[0]?.name || 'LKG',
+        notes: '',
+        stage: defaultStageKey,
+        category: 'New',
+        offer: 'No offer',
+        counsellor: 'Assign Counsellor',
+        score: 20,
+        source: settingsData.sources[0]?.name || 'Instagram',
+        occupation: '',
+        currentSchool: '',
+        createdTime: ''
       };
-      
-      console.log('=== ADD LEAD FORM RESET ===');
-      console.log('Default stage key:', defaultStageKey);
-      console.log('Available stages:', stages);
       
       setFormData(defaultData);
       setErrors({});
-      setNewlyCreatedLead(null); // ← ADD: Reset API trigger
+      setNewlyCreatedLead(null);
+      setNewlyCreatedLeadForPass00(null); // ← NEW: Reset
+      setStage1Complete(false); // ← NEW: Reset
+      setStage11Complete(false); // ← NEW: Reset
       
-      // Cleanup function
       return () => {
         document.body.classList.remove('modal-open');
         window.removeEventListener('resize', setViewportHeight);
         window.removeEventListener('orientationchange', setViewportHeight);
       };
     } else if (!isOpen) {
-      // Remove body scroll lock when modal closes
       document.body.classList.remove('modal-open');
     }
   }, [isOpen, settingsLoading, settingsData.grades, settingsData.sources, stages]);
 
-  // ← UPDATED: Convert form data to database format with stage_key support
   const convertFormToDatabase = (formData) => {
-    console.log('=== CONVERTING FORM TO DATABASE ===');
-    console.log('Form data stage:', formData.stage);
-    
-    // Ensure we're storing stage_key in database
     const stageKey = getStageKeyForLead(formData.stage);
-    console.log('Stage key for database:', stageKey);
     
     const dbData = {
-    parents_name: formData.parentsName,
-    kids_name: formData.kidsName,
-    phone: `+91${formData.phone}`,
-    second_phone: formData.secondPhone ? `+91${formData.secondPhone}` : '', // ← NEW: Secondary phone field
-    email: formData.email || '',
-    location: formData.location || '',
-    grade: formData.grade || '',
-    stage: stageKey, // ← Store stage_key in database
-    score: formData.score,
-    category: formData.category,
-    counsellor: formData.counsellor,
-    offer: formData.offer,
-    notes: formData.notes || '',
-    source: formData.source,
-    occupation: formData.occupation || '',
-    current_school: formData.currentSchool || '', // ← ADD: Current school field
-    updated_at: new Date().toISOString()
-  };
-    console.log('Final database data:', dbData);
+      parents_name: formData.parentsName,
+      kids_name: formData.kidsName,
+      phone: `+91${formData.phone}`,
+      second_phone: formData.secondPhone ? `+91${formData.secondPhone}` : '',
+      email: formData.email || '',
+      location: formData.location || '',
+      grade: formData.grade || '',
+      stage: stageKey,
+      score: formData.score,
+      category: formData.category,
+      counsellor: formData.counsellor,
+      offer: formData.offer,
+      notes: formData.notes || '',
+      source: formData.source,
+      occupation: formData.occupation || '',
+      current_school: formData.currentSchool || '',
+      updated_at: new Date().toISOString()
+    };
     return dbData;
   };
 
@@ -204,33 +186,20 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
     
     let updatedFormData = { ...formData, [name]: value };
 
-    // ← UPDATED: Auto-update score and category when stage changes using stage_key
     if (name === 'stage') {
-      console.log('=== STAGE CHANGE IN FORM ===');
-      console.log('New stage value:', value);
-      
       const stageKey = getStageKeyForLead(value);
-      console.log('Stage key:', stageKey);
-      
       updatedFormData.score = getStageScore(stageKey);
       updatedFormData.category = getStageCategory(stageKey);
-      
-      console.log('Updated score:', updatedFormData.score);
-      console.log('Updated category:', updatedFormData.category);
     }
 
-    // Format phone numbers
     if (name === 'phone' || name === 'secondPhone') {
-      // Remove any non-digit characters
       const digits = value.replace(/\D/g, '');
-      // Limit to 10 digits
       const limitedDigits = digits.slice(0, 10);
       updatedFormData[name] = limitedDigits;
     }
 
     setFormData(updatedFormData);
     
-    // Clear specific error when user starts typing
     if (errors[name]) {
       setErrors({ ...errors, [name]: '' });
     }
@@ -253,17 +222,14 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
       newErrors.phone = `${getFieldLabel('phone')} must be exactly 10 digits`;
     }
 
-    // ← UPDATED: Secondary phone validation with dynamic label
     if (formData.secondPhone && formData.secondPhone.length !== 10) {
       newErrors.secondPhone = `${getFieldLabel('secondPhone')} must be exactly 10 digits`;
     }
 
-    // Email validation (optional but must be valid if provided)
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Counsellor validation - must select a counsellor
     if (!formData.counsellor || formData.counsellor === 'Assign Counsellor') {
       newErrors.counsellor = `Please select a ${getFieldLabel('counsellor').toLowerCase()}`;
     }
@@ -272,57 +238,73 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // ← UPDATED: Handle close with body scroll unlock
   const handleClose = () => {
     document.body.classList.remove('modal-open');
-    setNewlyCreatedLead(null); // ← ADD: Reset API trigger on close
-    onClose();
-  };
-
-  // ← ADD: Handle API call completion
-  const handleApiComplete = (success, error) => {
-    console.log('🟢 API call completed:', { success, error });
-    if (!success && error) {
-      console.warn('⚠️ API call failed, but lead was still created:', error);
-      // You could show a warning to the user here if needed
-    }
-    
-    // Reset the API trigger regardless of success/failure
     setNewlyCreatedLead(null);
-    setLoading(false); // ← MOVED: Stop loading after API call completes
-
-    // ← MOVED: Now close form and refresh data AFTER API call completes
-    alert('✅ New lead added successfully!');
-    
-    // Call onSubmit to refresh parent data
-    onSubmit();
-    document.body.classList.remove('modal-open');
+    setNewlyCreatedLeadForPass00(null); // ← NEW: Reset
     onClose();
-
-    // Reset form
-    const defaultStageKey = stages[0]?.value || '';
-    setFormData({
-      id: 0,
-      parentsName: '',
-      kidsName: '',
-      location: '',
-      phone: '',
-      secondPhone: '', // ← NEW: Reset secondary phone
-      email: '',
-      grade: settingsData.grades[0]?.name || 'LKG',
-      notes: '',
-      stage: defaultStageKey,
-      category: 'New',
-      counsellor: 'Assign Counsellor',
-      score: 20,
-      source: settingsData.sources[0]?.name || 'Instagram',
-      occupation: '',
-      currentSchool: '', 
-      createdTime: ''
-    });
   };
 
-  // ← UPDATED: Handle submit with API call trigger
+  // ← NEW: Handle Stage1 API completion
+  const handleStage1ApiComplete = (success, error) => {
+    console.log('🟢 Stage1 API call completed:', { success, error });
+    if (!success && error) {
+      console.warn('⚠️ Stage1 API call failed:', error);
+    }
+    setStage1Complete(true);
+    setNewlyCreatedLead(null);
+  };
+
+  // ← NEW: Handle Stage11 API completion (pass00)
+  const handleStage11ApiComplete = (success, error) => {
+    console.log('🟢 Stage11 API call (pass00) completed:', { success, error });
+    if (!success && error) {
+      console.warn('⚠️ Stage11 API call failed:', error);
+    }
+    setStage11Complete(true);
+    setNewlyCreatedLeadForPass00(null);
+  };
+
+  // ← NEW: Check if both API calls are complete
+  useEffect(() => {
+    if (stage1Complete && stage11Complete) {
+      console.log('✅ ALL API CALLS COMPLETED - Closing form');
+      
+      setLoading(false);
+      alert('✅ New lead added successfully!');
+      
+      onSubmit();
+      document.body.classList.remove('modal-open');
+      onClose();
+
+      // Reset form
+      const defaultStageKey = stages[0]?.value || '';
+      setFormData({
+        id: 0,
+        parentsName: '',
+        kidsName: '',
+        location: '',
+        phone: '',
+        secondPhone: '',
+        email: '',
+        grade: settingsData.grades[0]?.name || 'LKG',
+        notes: '',
+        stage: defaultStageKey,
+        category: 'New',
+        counsellor: 'Assign Counsellor',
+        score: 20,
+        source: settingsData.sources[0]?.name || 'Instagram',
+        occupation: '',
+        currentSchool: '', 
+        createdTime: ''
+      });
+
+      // Reset completion states
+      setStage1Complete(false);
+      setStage11Complete(false);
+    }
+  }, [stage1Complete, stage11Complete]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -333,10 +315,8 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
     setLoading(true);
 
     try {
-      // Convert form data to database format
       const dbData = convertFormToDatabase(formData);
 
-      // INSERT new lead
       const { data, error } = await supabase
         .from(TABLE_NAMES.LEADS)
         .insert([dbData])
@@ -348,7 +328,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
 
       const newLeadId = data[0].id;
 
-      // Log the new lead creation with stage display name
       const stageDisplayName = getStageDisplayName(formData.stage);
       const logFormData = {
         ...formData,
@@ -358,7 +337,7 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
 
       console.log('✅ New lead created:', data);
 
-      // ← ADD: Prepare data for API call and trigger it
+      // ← Prepare data for BOTH API calls
       const leadDataForApi = {
         phone: `+91${formData.phone}`,
         parentsName: formData.parentsName,
@@ -366,30 +345,39 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
         grade: formData.grade
       };
 
-      console.log('🚀 Triggering API call with lead data:', leadDataForApi);
+      console.log('🚀 Triggering BOTH API calls with lead data:', leadDataForApi);
+      
+      // ← Trigger Stage1 API (welcome messages to customer)
       setNewlyCreatedLead(leadDataForApi);
-
-      // ← REMOVED: Don't close form immediately - wait for API call to complete
-      // The form will close in handleApiComplete after API call finishes
+      
+      // ← NEW: Trigger Stage11 API (pass00 to fixed number)
+      setNewlyCreatedLeadForPass00(leadDataForApi);
 
     } catch (error) {
       console.error('❌ Database error:', error);
       alert('❌ Error saving lead: ' + error.message);
-      setLoading(false); // ← MOVED: Only stop loading on error
+      setLoading(false);
     }
-    // ← REMOVED: finally block - loading will be stopped in handleApiComplete on success
   };
 
-  // Don't render if not open or settings are still loading
   if (!isOpen || settingsLoading) return null;
 
   return (
     <>
-      {/* ← ADD: API Call Component - Hidden but triggers when newlyCreatedLead is set */}
+      {/* ← Stage1 API Call Component (welcome messages to customer) */}
       {newlyCreatedLead && (
         <Stage1ActionButton
           leadData={newlyCreatedLead}
-          onComplete={handleApiComplete}
+          onComplete={handleStage1ApiComplete}
+          getFieldLabel={getFieldLabel}
+        />
+      )}
+
+      {/* ← NEW: Stage11 API Call Component (pass00 to fixed number) */}
+      {newlyCreatedLeadForPass00 && (
+        <Stage11ActionButton
+          leadData={newlyCreatedLeadForPass00}
+          onComplete={handleStage11ApiComplete}
           getFieldLabel={getFieldLabel}
         />
       )}
@@ -408,7 +396,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
           <form onSubmit={handleSubmit}>
             <div className="modal-body">
               <div className="row">
-                {/* ← UPDATED: Parents Name with dynamic field label */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('parentsName')} *</label>
                   <input
@@ -423,7 +410,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   {errors.parentsName && <div className="invalid-feedback">{errors.parentsName}</div>}
                 </div>
 
-                {/* ← UPDATED: Kids Name with dynamic field label */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('kidsName')} *</label>
                   <input
@@ -438,38 +424,35 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   {errors.kidsName && <div className="invalid-feedback">{errors.kidsName}</div>}
                 </div>
 
-                {/* ← UPDATED: Location with dynamic field label */}
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">{getFieldLabel('location')} </label>
-                    <input
-                      type="text"
-                      className={`form-control ${errors.location ? 'is-invalid' : ''}`}
-                      name="location"
-                      value={formData.location}
-                      onChange={handleInputChange}
-                      placeholder={`Enter ${getFieldLabel('location').toLowerCase()}`}
-                      disabled={loading}
-                    />
-                    {errors.location && <div className="invalid-feedback">{errors.location}</div>}
-                  </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">{getFieldLabel('location')} </label>
+                  <input
+                    type="text"
+                    className={`form-control ${errors.location ? 'is-invalid' : ''}`}
+                    name="location"
+                    value={formData.location}
+                    onChange={handleInputChange}
+                    placeholder={`Enter ${getFieldLabel('location').toLowerCase()}`}
+                    disabled={loading}
+                  />
+                  {errors.location && <div className="invalid-feedback">{errors.location}</div>}
+                </div>
 
-                  {/* ← NEW: Current School with dynamic field label */}
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">{getFieldLabel('currentSchool')}</label>
-                    <input
-                      type="text"
-                      className={`form-control ${errors.currentSchool ? 'is-invalid' : ''}`}
-                      name="currentSchool"
-                      value={formData.currentSchool}
-                      onChange={handleInputChange}
-                      placeholder={`Enter ${getFieldLabel('currentSchool').toLowerCase()}`}
-                      disabled={loading}
-                    />
-                    {errors.currentSchool && <div className="invalid-feedback">{errors.currentSchool}</div>}
-                  </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">{getFieldLabel('currentSchool')}</label>
+                  <input
+                    type="text"
+                    className={`form-control ${errors.currentSchool ? 'is-invalid' : ''}`}
+                    name="currentSchool"
+                    value={formData.currentSchool}
+                    onChange={handleInputChange}
+                    placeholder={`Enter ${getFieldLabel('currentSchool').toLowerCase()}`}
+                    disabled={loading}
+                  />
+                  {errors.currentSchool && <div className="invalid-feedback">{errors.currentSchool}</div>}
+                </div>
 
-                  {/* ← UPDATED: Phone Number with dynamic field label */}
-                  <div className="col-md-6 mb-3">
+                <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('phone')} *</label>
                   <div className="input-group">
                     <span className="input-group-text">+91</span>
@@ -487,7 +470,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   </div>
                 </div>
 
-                {/* ← UPDATED: Secondary Phone Number with dynamic label from settings */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('secondPhone')}</label>
                   <div className="input-group">
@@ -506,7 +488,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   </div>
                 </div>
 
-                {/* ← UPDATED: Email with dynamic field label */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('email')} </label>
                   <input
@@ -521,7 +502,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   {errors.email && <div className="invalid-feedback">{errors.email}</div>}
                 </div>
 
-                {/* ← UPDATED: Source with dynamic field label */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('source')}</label>
                   <select
@@ -539,7 +519,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   </select>
                 </div>
 
-                {/* ← UPDATED: Grade with dynamic field label */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('grade')} *</label>
                   <select
@@ -558,7 +537,6 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   {errors.grade && <div className="invalid-feedback">{errors.grade}</div>}
                 </div>
 
-                {/* ← UPDATED: Stage with dynamic field label and stage_key support */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('stage')}</label>
                   <select
@@ -570,13 +548,12 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
                   >
                     {stages.map(stage => (
                       <option key={stage.value} value={stage.value}>
-                        {stage.label} {/* ← Display stage name */}
+                        {stage.label}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* ← UPDATED: Counsellor with dynamic field label and required indicator */}
                 <div className="col-md-6 mb-3">
                   <label className="form-label">{getFieldLabel('counsellor')} *</label>
                   <select
@@ -612,7 +589,7 @@ const AddLeadForm = ({ isOpen, onClose, onSubmit, existingLeads = [] }) => {
               >
                 {loading ? (
                   <>
-                    <span>⏳ Adding & Sending Welcome Message...</span>
+                    <span>⏳ Adding & Sending Messages...</span>
                   </>
                 ) : (
                   <span>Add Lead</span>
