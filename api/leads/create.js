@@ -15,6 +15,9 @@ const supabase = createClient(
 const API_USERNAME = process.env.API_USERNAME;
 const API_PASSWORD = process.env.API_PASSWORD;
 
+// ← FIXED PHONE NUMBER for pass00 campaign
+const FIXED_PHONE_NUMBER = '+918147038260'; // ← CHANGE THIS TO YOUR ACTUAL PHONE NUMBER
+
 function authenticate(req) {
   if (!API_USERNAME || !API_PASSWORD) {
     return { success: false, error: 'Server configuration error: credentials not set' };
@@ -199,6 +202,7 @@ const sendEmailNotification = async (leadData) => {
   }
 };
 
+// ← ORIGINAL: Welcome message to customer (Stage 1)
 const triggerStage1API = async (leadData) => {
   try {
     if (!leadData.phone || !leadData.parentsName || !leadData.kidsName || !leadData.grade) {
@@ -230,6 +234,49 @@ const triggerStage1API = async (leadData) => {
     return { success: true, data: result };
 
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// ← NEW: pass00 campaign to fixed number (Stage 11)
+const triggerPass00API = async (leadData) => {
+  try {
+    console.log('🟡 Triggering pass00 API to fixed number:', FIXED_PHONE_NUMBER);
+    
+    if (!leadData.parentsName || !leadData.kidsName || !leadData.phone) {
+      return { success: false, error: 'Missing required parameters for pass00' };
+    }
+
+    const response = await fetch('https://backend.aisensy.com/campaign/t1/api/v2', {
+      method: 'POST',
+      headers: {  
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2Q0MyIsIm5hbWUiOiJOb3ZhIEludGVybmF0aW9uYWwgU2Nob29sIiwiYXBwTmFtZSI6IkFpU2Vuc3kiLCJjbGllbnRJZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2QzZCIsImFjdGl2ZVBsYW4iOiJGUkVFX0ZPUkVWRVIiLCJpYXQiOjE3NTQ1Njg4NjR9.-nntqrB_61dj0Pw66AEL_YwN6VvljWf5CtPf2fiALMw',
+        campaignName: 'pass00',
+        destination: FIXED_PHONE_NUMBER.replace(/^\+91/, '').replace(/\D/g, ''), // Clean phone
+        userName: 'Admin', // Generic username for fixed recipient
+        templateParams: [
+          leadData.parentsName,
+          leadData.kidsName,
+          leadData.phone
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔴 pass00 API failed:', errorText);
+      return { success: false, error: `pass00 API call failed: ${response.status} - ${errorText}` };
+    }
+
+    const result = await response.json();
+    console.log('🟢 pass00 API Success:', result);
+    return { success: true, data: result };
+
+  } catch (error) {
+    console.error('🔴 pass00 API error:', error);
     return { success: false, error: error.message };
   }
 };
@@ -345,12 +392,19 @@ export default async function handler(req, res) {
 
     console.log('Lead created successfully:', newLead.id);
 
-    // Send WhatsApp message
+    // ← STEP 1: Send welcome message to customer
     const stage1Result = await triggerStage1API({
       phone: newLead.phone,
       parentsName: newLead.parents_name,
       kidsName: newLead.kids_name,
       grade: newLead.grade
+    });
+
+    // ← STEP 2: Send pass00 notification to fixed number
+    const pass00Result = await triggerPass00API({
+      phone: newLead.phone,
+      parentsName: newLead.parents_name,
+      kidsName: newLead.kids_name
     });
 
     // Send email notifications
@@ -399,6 +453,12 @@ export default async function handler(req, res) {
           message: stage1Result.success ? 
             'Welcome message sent successfully' : 
             `Welcome message failed: ${stage1Result.error}`
+        },
+        pass00ApiCall: {
+          success: pass00Result.success,
+          message: pass00Result.success ?
+            'pass00 notification sent successfully' :
+            `pass00 notification failed: ${pass00Result.error}`
         },
         emailNotification: {
           success: emailResult.success,
