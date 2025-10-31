@@ -16,7 +16,7 @@ const API_USERNAME = process.env.API_USERNAME;
 const API_PASSWORD = process.env.API_PASSWORD;
 
 // ← FIXED PHONE NUMBER for pass00 campaign
-const FIXED_PHONE_NUMBER = '8147038260'; // ← Clean 10-digit number only
+const FIXED_PHONE_NUMBER = '8956835804'; // ← Clean 10-digit number only
 
 function authenticate(req) {
   if (!API_USERNAME || !API_PASSWORD) {
