@@ -110,8 +110,8 @@ const Stage1ActionButton = ({
         userName: leadData.parentsName,
         templateParams: [leadData.parentsName],
         media: {
-          url: 'https://candidschools.com/NOVA_B.pdf',
-          filename: 'NOVA_B.pdf'
+          url: 'https://candidschools.com/NOVA_Brochure.pdf',
+          filename: 'NOVA_Brochure.pdf'
         }
       };
 
