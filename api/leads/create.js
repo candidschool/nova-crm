@@ -15,8 +15,8 @@ const supabase = createClient(
 const API_USERNAME = process.env.API_USERNAME;
 const API_PASSWORD = process.env.API_PASSWORD;
 
-// ← FIXED PHONE NUMBER for pass00 campaign
-const FIXED_PHONE_NUMBER = '8956835804'; // ← Clean 10-digit number only
+// Fixed phone number for pass00 campaign
+const FIXED_PHONE_NUMBER = '8956835804'; // Clean 10-digit number only
 
 function authenticate(req) {
   if (!API_USERNAME || !API_PASSWORD) {
@@ -202,9 +202,11 @@ const sendEmailNotification = async (leadData) => {
   }
 };
 
-// ← ORIGINAL: Welcome message to customer (Stage 1)
-const triggerStage1API = async (leadData) => {
+// API Call 1: Welcome text message to customer
+const triggerWelcomeTextAPI = async (leadData) => {
   try {
+    console.log('🟡 Triggering welcome text API (campaign: welcome)');
+    
     if (!leadData.phone || !leadData.parentsName || !leadData.kidsName || !leadData.grade) {
       return { success: false, error: 'Missing required parameters' };
     }
@@ -227,18 +229,70 @@ const triggerStage1API = async (leadData) => {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('🔴 Welcome text API failed:', errorText);
       return { success: false, error: `API call failed: ${response.status} - ${errorText}` };
     }
 
     const result = await response.json();
+    console.log('🟢 Welcome text API Success:', result);
     return { success: true, data: result };
 
   } catch (error) {
+    console.error('🔴 Welcome text API error:', error);
     return { success: false, error: error.message };
   }
 };
 
-// ← FIXED: pass00 campaign to fixed number (Stage 11)
+// API Call 2: Welcome PDF document to customer
+const triggerWelcomeDocumentAPI = async (leadData) => {
+  try {
+    console.log('🟡 Triggering welcome document API (campaign: welcome0000)');
+    
+    if (!leadData.phone || !leadData.parentsName) {
+      return { success: false, error: 'Missing required parameters for document' };
+    }
+
+    const cleanPhone = leadData.phone.replace(/^\+91/, '').replace(/\D/g, '');
+
+    const requestBody = {
+      apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2Q0MyIsIm5hbWUiOiJOb3ZhIEludGVybmF0aW9uYWwgU2Nob29sIiwiYXBwTmFtZSI6IkFpU2Vuc3kiLCJjbGllbnRJZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2QzZCIsImFjdGl2ZVBsYW4iOiJGUkVFX0ZPUkVWRVIiLCJpYXQiOjE3NTQ1Njg4NjR9.-nntqrB_61dj0Pw66AEL_YwN6VvljWf5CtPf2fiALMw',
+      campaignName: 'welcome0000',
+      destination: cleanPhone,
+      userName: leadData.parentsName,
+      templateParams: [leadData.parentsName],
+      media: {
+        url: 'https://candidschools.com/NOVA_B.pdf',
+        filename: 'NOVA_B.pdf'
+      }
+    };
+
+    console.log('📤 Welcome document request body:', requestBody);
+
+    const response = await fetch('https://backend.aisensy.com/campaign/t1/api/v2', {
+      method: 'POST',
+      headers: {  
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔴 Welcome document API failed:', errorText);
+      return { success: false, error: `Document API call failed: ${response.status} - ${errorText}` };
+    }
+
+    const result = await response.json();
+    console.log('🟢 Welcome document API Success:', result);
+    return { success: true, data: result };
+
+  } catch (error) {
+    console.error('🔴 Welcome document API error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// API Call 3: pass00 notification to fixed number
 const triggerPass00API = async (leadData) => {
   try {
     console.log('🟡 Triggering pass00 API to fixed number:', FIXED_PHONE_NUMBER);
@@ -247,13 +301,12 @@ const triggerPass00API = async (leadData) => {
       return { success: false, error: 'Missing required parameters for pass00' };
     }
 
-    // ← FIXED: No templateParams since campaign has none
+    // No templateParams since campaign has none
     const requestBody = {
       apiKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2Q0MyIsIm5hbWUiOiJOb3ZhIEludGVybmF0aW9uYWwgU2Nob29sIiwiYXBwTmFtZSI6IkFpU2Vuc3kiLCJjbGllbnRJZCI6IjY4OTQ5OGEwNGFiMGYxMGMwZGZjM2QzZCIsImFjdGl2ZVBsYW4iOiJGUkVFX0ZPUkVWRVIiLCJpYXQiOjE3NTQ1Njg4NjR9.-nntqrB_61dj0Pw66AEL_YwN6VvljWf5CtPf2fiALMw',
       campaignName: 'pass00',
-      destination: FIXED_PHONE_NUMBER, // ← Clean 10-digit number
+      destination: FIXED_PHONE_NUMBER,
       userName: 'Admin'
-      // ← REMOVED templateParams - campaign has no parameters
     };
 
     console.log('📤 pass00 request body:', requestBody);
@@ -392,21 +445,41 @@ export default async function handler(req, res) {
     }
 
     console.log('Lead created successfully:', newLead.id);
+    console.log('═══════════════════════════════════════════════════');
+    console.log('TRIGGERING 3 API CALLS SEQUENTIALLY');
+    console.log('═══════════════════════════════════════════════════');
 
-    // ← STEP 1: Send welcome message to customer
-    const stage1Result = await triggerStage1API({
+    // STEP 1: Send welcome text message to customer
+    console.log('STEP 1: Calling welcome text API');
+    const welcomeTextResult = await triggerWelcomeTextAPI({
       phone: newLead.phone,
       parentsName: newLead.parents_name,
       kidsName: newLead.kids_name,
       grade: newLead.grade
     });
 
-    // ← STEP 2: Send pass00 notification to fixed number
+    // STEP 2: Send welcome PDF document to customer
+    console.log('STEP 2: Calling welcome document API');
+    const welcomeDocResult = await triggerWelcomeDocumentAPI({
+      phone: newLead.phone,
+      parentsName: newLead.parents_name,
+      kidsName: newLead.kids_name
+    });
+
+    // STEP 3: Send pass00 notification to fixed number
+    console.log('STEP 3: Calling pass00 API');
     const pass00Result = await triggerPass00API({
       phone: newLead.phone,
       parentsName: newLead.parents_name,
       kidsName: newLead.kids_name
     });
+
+    console.log('═══════════════════════════════════════════════════');
+    console.log('ALL 3 API CALLS COMPLETED');
+    console.log('Welcome Text:', welcomeTextResult.success ? '✅' : '❌');
+    console.log('Welcome Document:', welcomeDocResult.success ? '✅' : '❌');
+    console.log('pass00 Notification:', pass00Result.success ? '✅' : '❌');
+    console.log('═══════════════════════════════════════════════════');
 
     // Send email notifications
     const emailResult = await sendEmailNotification(newLead);
@@ -426,7 +499,12 @@ export default async function handler(req, res) {
         additional_info: {
           source: 'API',
           created_via: 'API Endpoint',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          api_calls: {
+            welcomeText: welcomeTextResult.success,
+            welcomeDocument: welcomeDocResult.success,
+            pass00: pass00Result.success
+          }
         },
         timestamp: new Date().toISOString()
       };
@@ -449,17 +527,25 @@ export default async function handler(req, res) {
         score: newLead.score,
         counsellor: newLead.counsellor,
         createdAt: newLead.created_at,
-        stage1ApiCall: {
-          success: stage1Result.success,
-          message: stage1Result.success ? 
-            'Welcome message sent successfully' : 
-            `Welcome message failed: ${stage1Result.error}`
-        },
-        pass00ApiCall: {
-          success: pass00Result.success,
-          message: pass00Result.success ?
-            'pass00 notification sent successfully' :
-            `pass00 notification failed: ${pass00Result.error}`
+        apiCalls: {
+          welcomeText: {
+            success: welcomeTextResult.success,
+            message: welcomeTextResult.success ? 
+              'Welcome text message sent successfully' : 
+              `Welcome text failed: ${welcomeTextResult.error}`
+          },
+          welcomeDocument: {
+            success: welcomeDocResult.success,
+            message: welcomeDocResult.success ?
+              'Welcome PDF document sent successfully' :
+              `Welcome document failed: ${welcomeDocResult.error}`
+          },
+          pass00Notification: {
+            success: pass00Result.success,
+            message: pass00Result.success ?
+              'pass00 notification sent successfully' :
+              `pass00 notification failed: ${pass00Result.error}`
+          }
         },
         emailNotification: {
           success: emailResult.success,
