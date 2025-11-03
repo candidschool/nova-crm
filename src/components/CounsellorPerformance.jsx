@@ -3,12 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recha
 import { supabase } from '../lib/supabase';
 import { TABLE_NAMES } from '../config/tableNames';
 import { useSettingsData } from '../contexts/SettingsDataProvider';
+import { achievementsService } from '../services/achievementsService';
 import { 
-  GraduationCap, 
-  Trophy,
-  Users,
   BarChart3,
-  Loader2
+  Loader2,
+  TrendingUp,
+  Award
 } from 'lucide-react';
 import LeftSidebar from './LeftSidebar';
 
@@ -16,38 +16,27 @@ import LeftSidebar from './LeftSidebar';
 import meetingsDoneIcon from '../assets/icons/meetings-done.png';
 import visitsDoneIcon from '../assets/icons/visits-done.png';
 import registeredIcon from '../assets/icons/registered.png';
-import enrolledIcon from '../assets/icons/enrolled.png';
-import topPerformerIcon from '../assets/icons/top-performer.png';
 
 const CounsellorPerformance = ({ onLogout, user }) => {
-  // Use settings data context with stage_key support
   const { 
     settingsData, 
     getFieldLabel,
-    getStageInfo,
-    getStageColor: contextGetStageColor, 
-    getStageCategory: contextGetStageCategory,
     getStageKeyFromName,
-    getStageNameFromKey,
-    stageKeyToDataMapping,
     loading: settingsLoading 
   } = useSettingsData();
 
-  // Direct data fetching - completely independent of LeadStateProvider
-  const [rawLeadsData, setRawLeadsData] = useState([]);
+  const [counsellorData, setCounsellorData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState({
     fromDate: '',
     toDate: '',
     isActive: false
   });
-  const [selectedMetric, setSelectedMetric] = useState('registered');
+  const [selectedMetric, setSelectedMetric] = useState('meetingBooked');
   
-  // NEW: Mobile navigation state
   const [isMobile, setIsMobile] = useState(false);
   const [currentBarIndex, setCurrentBarIndex] = useState(0);
 
-  // Get dynamic stages with stage_key support
   const stages = useMemo(() => {
     return settingsData.stages.map(stage => ({
       value: stage.stage_key || stage.name,
@@ -58,7 +47,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     }));
   }, [settingsData.stages]);
 
-  // NEW: Mobile detection effect
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -70,313 +58,78 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Stage key conversion functions
-  const getLeadStageKey = (leadStageValue) => {
-    // If the lead already has a stage_key, return it
-    if (stageKeyToDataMapping[leadStageValue]) {
-      return leadStageValue;
-    }
-    
-    // Otherwise, try to convert stage name to stage_key
-    const stageKey = getStageKeyFromName(leadStageValue);
-    return stageKey || leadStageValue; // fallback to original value
-  };
+  // The 3 tracked stages
+  const performanceStages = [
+    { key: 'meetingBooked', name: 'Session Booked', icon: meetingsDoneIcon },
+    { key: 'meetingDone', name: 'Session Catered', icon: visitsDoneIcon },
+    { key: 'admission', name: 'Admission Done', icon: registeredIcon }
+  ];
 
-  const getLeadStageDisplayName = (leadStageValue) => {
-    // If it's a stage_key, get the display name
-    if (stageKeyToDataMapping[leadStageValue]) {
-      return getStageNameFromKey(leadStageValue);
-    }
-    
-    // Otherwise, it's probably already a stage name
-    return leadStageValue;
-  };
-
-  // Convert database record to UI format with stage_key support
-  const convertDatabaseToUI = (dbRecord) => {
-    let meetingDate = '';
-    let meetingTime = '';
-    let visitDate = '';
-    let visitTime = '';
-
-    if (dbRecord.meet_datetime) {
-      const meetDateTime = new Date(dbRecord.meet_datetime);
-      meetingDate = meetDateTime.toISOString().split('T')[0];
-      meetingTime = meetDateTime.toTimeString().slice(0, 5);
-    }
-
-    if (dbRecord.visit_datetime) {
-      const visitDateTime = new Date(dbRecord.visit_datetime);
-      visitDate = visitDateTime.toISOString().split('T')[0];
-      visitTime = visitDateTime.toTimeString().slice(0, 5);
-    }
-
-    // Handle stage value with current settings context
-    const stageValue = dbRecord.stage;
-    const stageKey = getLeadStageKey(stageValue);
-    const displayName = getLeadStageDisplayName(stageValue);
-
-    return {
-      id: dbRecord.id,
-      parentsName: dbRecord.parents_name,
-      kidsName: dbRecord.kids_name,
-      phone: dbRecord.phone,
-      location: dbRecord.location,
-      grade: dbRecord.grade,
-      stage: stageKey, // Store stage_key internally
-      stageDisplayName: displayName, // Store display name for UI
-      score: dbRecord.score,
-      category: dbRecord.category,
-      counsellor: dbRecord.counsellor,
-      offer: dbRecord.offer,
-      notes: dbRecord.notes,
-      email: dbRecord.email || '',
-      occupation: dbRecord.occupation || '',
-      source: dbRecord.source || (settingsData?.sources?.[0]?.name || 'Instagram'),
-      currentSchool: dbRecord.current_school || '',
-      meetingDate: meetingDate,
-      meetingTime: meetingTime,
-      meetingLink: dbRecord.meet_link || '',
-      visitDate: visitDate,
-      visitTime: visitTime,
-      visitLocation: dbRecord.visit_location || '',
-      registrationFees: dbRecord.reg_fees || '',
-      enrolled: dbRecord.enrolled || '',
-      stage2_status: dbRecord.stage2_status || '',
-      stage3_status: dbRecord.stage3_status || '',
-      stage4_status: dbRecord.stage4_status || '',
-      stage5_status: dbRecord.stage5_status || '',
-      stage6_status: dbRecord.stage6_status || '',
-      stage7_status: dbRecord.stage7_status || '',
-      stage8_status: dbRecord.stage8_status || '',
-      stage9_status: dbRecord.stage9_status || '',
-      previousStage: dbRecord.previous_stage || '',
-      createdTime: new Date(dbRecord.created_at).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      }).replace(',', '')
-    };
-  };
-
-  // Process leads data with current settings - recomputed when settings change
-  const leadsData = useMemo(() => {
-    console.log('=== PROCESSING COUNSELLOR PERFORMANCE LEADS DATA ===');
-    console.log('Raw leads count:', rawLeadsData.length);
-    console.log('Settings stages:', settingsData.stages.length);
-    
-    if (!rawLeadsData.length || !settingsData.stages.length) {
-      return [];
-    }
-
-    const processedData = rawLeadsData.map(convertDatabaseToUI);
-    console.log('Processed leads count:', processedData.length);
-    return processedData;
-  }, [rawLeadsData, settingsData, stageKeyToDataMapping, getLeadStageKey, getLeadStageDisplayName]);
-
-  // Direct data fetching - independent of context
-  const fetchLeads = async () => {
+  // Fetch achievements data with date filtering
+  const fetchAchievements = async () => {
     try {
       setLoading(true);
-      console.log('=== FETCHING ALL LEADS FOR COUNSELLOR PERFORMANCE ===');
+      console.log('=== FETCHING COUNSELLOR ACHIEVEMENTS ===');
+      console.log('Date range:', dateRange);
       
-      // ✅ FIXED: Fetch ALL leads using batching (like LeadsTable.jsx does)
-      let allLeads = [];
-      let from = 0;
-      const batchSize = 1000;
-      let hasMore = true;
+      // Apply date filter if active
+      const fromDate = dateRange.isActive && dateRange.fromDate ? dateRange.fromDate : null;
+      const toDate = dateRange.isActive && dateRange.toDate ? dateRange.toDate : null;
       
-      while (hasMore) {
-        console.log(`Fetching batch starting from ${from}...`);
-        
-        const { data, error } = await supabase
-          .from(TABLE_NAMES.LEADS)
-          .select('*')
-          .order('id', { ascending: false })
-          .range(from, from + batchSize - 1);
-        
-        if (error) throw error;
-        
-        console.log(`Fetched ${data.length} leads in this batch`);
-        allLeads = [...allLeads, ...data];
-        
-        if (data.length < batchSize) {
-          hasMore = false;
-        } else {
-          from += batchSize;
-        }
-      }
-
-      console.log('✅ Total leads fetched:', allLeads.length);
-      console.log('🔍 Lead stage distribution:');
+      const { data, error } = await achievementsService.getAchievementsByTimeRange(fromDate, toDate);
       
-      // Count leads by stage
-      const stageCounts = {};
-      allLeads.forEach(lead => {
-        const stage = lead.stage || 'unknown';
-        stageCounts[stage] = (stageCounts[stage] || 0) + 1;
+      if (error) throw error;
+      
+      console.log('✅ Achievements fetched:', data);
+      
+      // Calculate percentages
+      const dataWithPercentages = data.map(counsellor => {
+        const visitPercent = counsellor.meetingBooked > 0 
+          ? ((counsellor.meetingDone / counsellor.meetingBooked) * 100).toFixed(0)
+          : 0;
+        
+        const admissionPercent = counsellor.meetingDone > 0
+          ? ((counsellor.admission / counsellor.meetingDone) * 100).toFixed(0)
+          : 0;
+        
+        return {
+          ...counsellor,
+          visitPercent: parseFloat(visitPercent),
+          admissionPercent: parseFloat(admissionPercent)
+        };
       });
-      console.table(stageCounts);
       
-      setRawLeadsData(allLeads);
+      // Sort by admission percent (highest first)
+      const sorted = dataWithPercentages.sort((a, b) => b.admissionPercent - a.admissionPercent);
+      
+      setCounsellorData(sorted);
+      
     } catch (error) {
-      console.error('Error fetching leads for counsellor performance:', error);
+      console.error('❌ Error fetching achievements:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch data on component mount
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    fetchAchievements();
+  }, [dateRange.isActive, dateRange.fromDate, dateRange.toDate]);
 
   // Get current date for max date validation
   const currentDate = new Date().toISOString().split('T')[0];
 
-  // Get all available stage keys and names dynamically from settings
-  const availableStages = useMemo(() => {
-    console.log('=== AVAILABLE STAGES FROM SETTINGS ===');
-    console.log('Settings stages:', settingsData.stages);
-    
-    const stageList = settingsData.stages.map(stage => ({
-      key: stage.stage_key || stage.name,
-      name: stage.name,
-      color: stage.color,
-      score: stage.score,
-      category: stage.status
-    }));
-    
-    console.log('Available stage list:', stageList);
-    return stageList;
-  }, [settingsData.stages]);
-
-  // 🔍 DEBUG: Log your actual stage keys to find the correct ones
-  useEffect(() => {
-    console.log('=== 🔍 YOUR ACTUAL STAGE KEYS (CHECK CONSOLE) ===');
-    settingsData.stages.forEach(stage => {
-      console.log(`Stage Name: "${stage.name}" | Stage Key: "${stage.stage_key}"`);
-    });
-    console.log('=== Copy the stage_key values and update targetStageKeys array below ===');
-  }, [settingsData.stages]);
-
-  // ✅ FIXED: Filter to only the 3 specific stages we want to track
-  // ⚠️ IMPORTANT: Replace these with YOUR ACTUAL stage keys from console log above
-  const targetStageKeys = ['meetingBooked', 'visitBooked', 'registered'];
-  const performanceStages = useMemo(() => {
-    const filtered = availableStages.filter(stage => targetStageKeys.includes(stage.key));
-    console.log('=== PERFORMANCE STAGES (FILTERED) ===');
-    console.log('Target stage keys:', targetStageKeys);
-    console.log('Filtered stages:', filtered);
-    return filtered;
-  }, [availableStages]);
-
-  // Set default selected metric to registered
-  useEffect(() => {
-    if (performanceStages.length > 0 && !selectedMetric) {
-      setSelectedMetric('registered');
-    }
-  }, [performanceStages, selectedMetric]);
-
-  // Filter leads by date range
-  const getFilteredLeadsByDate = useMemo(() => {
-    if (!Array.isArray(leadsData) || leadsData.length === 0) {
-      return [];
-    }
-
-    if (!dateRange.isActive || !dateRange.fromDate || !dateRange.toDate) {
-      return leadsData;
-    }
-    
-    return leadsData.filter(lead => {
-      try {
-        const leadDate = new Date(lead.createdTime?.replace(/(\d{2}) (\w{3}) (\d{4})/, '$2 $1, $3'));
-        const fromDate = new Date(dateRange.fromDate);
-        const toDate = new Date(dateRange.toDate);
-        toDate.setHours(23, 59, 59, 999);
-        
-        return leadDate >= fromDate && leadDate <= toDate;
-      } catch (error) {
-        console.error('Error parsing lead date:', lead.createdTime, error);
-        return true;
-      }
-    });
-  }, [leadsData, dateRange]);
-
-  // ✅ FIXED: Calculate counsellor performance using the 3 specific stages with proper stage keys
-  const counsellorData = useMemo(() => {
-    const filteredLeads = getFilteredLeadsByDate;
-    
-    console.log('=== COUNSELLOR PERFORMANCE CALCULATION ===');
-    console.log('Filtered leads count:', filteredLeads.length);
-    console.log('Performance stages:', performanceStages);
-    
-    // 🔍 DEBUG: Sample the first 5 leads to see their actual stage values
-    console.log('=== SAMPLE LEAD STAGES (First 5) ===');
-    filteredLeads.slice(0, 5).forEach(lead => {
-      console.log(`Lead ${lead.id}: stage="${lead.stage}", stageDisplayName="${lead.stageDisplayName}", counsellor="${lead.counsellor}"`);
-    });
-    
-    const counsellorStats = filteredLeads.reduce((acc, lead) => {
-      const counsellor = lead.counsellor || 'Unknown';
-      
-      if (!acc[counsellor]) {
-        acc[counsellor] = {
-          totalLeads: 0
-        };
-        
-        // Initialize counters for only the 3 performance stages
-        performanceStages.forEach(stage => {
-          acc[counsellor][stage.key] = 0;
-        });
-      }
-      
-      acc[counsellor].totalLeads++;
-      
-      // Use stage_key logic
-      const leadStageKey = getLeadStageKey(lead.stage);
-      
-      // 🔍 DEBUG: Log every lead's stage matching
-      if (acc[counsellor].totalLeads <= 3) {
-        console.log(`Lead ${lead.id} - Counsellor: ${counsellor}, Stage Key: ${leadStageKey}, Display: ${lead.stageDisplayName}`);
-      }
-      
-      // Check only the 3 performance stages
-      performanceStages.forEach(stage => {
-        if (leadStageKey === stage.key) {
-          acc[counsellor][stage.key]++;
-          console.log(`  ✅ MATCH! ${stage.name} for ${counsellor} (Lead ${lead.id})`);
-        }
-      });
-      
-      return acc;
-    }, {});
-
-    console.log('Final counsellor stats:', counsellorStats);
-
-    // ✅ FIXED: Calculate conversion rates based on registered stage (not admission)
-    return Object.entries(counsellorStats).map(([name, stats]) => ({
-      name,
-      ...stats,
-      conversionRate: stats.totalLeads > 0 ? ((stats.registered || 0) / stats.totalLeads * 100).toFixed(0) : 0
-    })).filter(counsellor => {
-      // Only show counsellors that exist in settings
-      const validCounsellors = settingsData?.counsellors?.map(c => c.name) || [];
-      return validCounsellors.includes(counsellor.name);
-    }).sort((a, b) => b.conversionRate - a.conversionRate);
-  }, [getFilteredLeadsByDate, performanceStages, getLeadStageKey, settingsData?.counsellors]);
-
-  // Get top performer
-  const topPerformer = useMemo(() => {
+  // Get top performers
+  const topVisitPerformer = useMemo(() => {
     if (counsellorData.length === 0) return null;
-    return counsellorData[0];
+    return [...counsellorData].sort((a, b) => b.visitPercent - a.visitPercent)[0];
   }, [counsellorData]);
 
-  // Prepare bar chart data with mobile support
+  const topAdmissionPerformer = useMemo(() => {
+    if (counsellorData.length === 0) return null;
+    return [...counsellorData].sort((a, b) => b.admissionPercent - a.admissionPercent)[0];
+  }, [counsellorData]);
+
+  // Prepare bar chart data
   const barChartData = useMemo(() => {
     const fullData = counsellorData.map(counsellor => ({
       name: counsellor.name.split(' ')[0],
@@ -385,7 +138,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
       metric: selectedMetric
     }));
     
-    // On mobile, show only one bar at a time
     if (isMobile && fullData.length > 0) {
       return [fullData[currentBarIndex] || fullData[0]];
     }
@@ -393,7 +145,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     return fullData;
   }, [counsellorData, selectedMetric, isMobile, currentBarIndex]);
 
-  // NEW: Navigation functions for mobile
   const goToPreviousBar = () => {
     setCurrentBarIndex(prev => 
       prev > 0 ? prev - 1 : counsellorData.length - 1
@@ -406,29 +157,21 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     );
   };
 
-  // Reset current bar index when counsellor data changes
   useEffect(() => {
     if (currentBarIndex >= counsellorData.length && counsellorData.length > 0) {
       setCurrentBarIndex(0);
     }
   }, [counsellorData.length, currentBarIndex]);
 
-  // Count function for sidebar using stage_key
   const getStageCount = (stageName) => {
-    const stageKey = getStageKeyFromName(stageName);
-    return leadsData.filter(lead => {
-      const leadStageKey = getLeadStageKey(lead.stage);
-      return leadStageKey === stageKey || lead.stage === stageName;
-    }).length;
+    return 0; // Not used in this view
   };
 
-  // Get stage name for display from stage key
   const getStageDisplayName = (stageKey) => {
     const stage = performanceStages.find(s => s.key === stageKey);
     return stage ? stage.name : stageKey;
   };
 
-  // Loading check for both data and settings
   if (loading || settingsLoading) {
     return (
       <div className="nova-crm" style={{ fontFamily: 'Inter, sans-serif' }}>
@@ -459,7 +202,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     );
   }
 
-  // Handle date filter submission
   const handleSubmit = () => {
     if (dateRange.fromDate && dateRange.toDate) {
       if (new Date(dateRange.fromDate) <= new Date(dateRange.toDate)) {
@@ -472,12 +214,10 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     }
   };
 
-  // Handle clear filter
   const handleClear = () => {
     setDateRange({ fromDate: '', toDate: '', isActive: false });
   };
 
-  // Get counsellor initials
   const getCounsellorInitials = (fullName) => {
     if (!fullName) return 'NA';
     const words = fullName.trim().split(' ');
@@ -485,7 +225,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     return firstTwoWords.map(word => word.charAt(0).toUpperCase()).join('');
   };
 
-  // Custom tooltip for bar chart
   const BarTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -500,8 +239,7 @@ const CounsellorPerformance = ({ onLogout, user }) => {
     return null;
   };
 
-  // Show loading state if no data
-  if (!leadsData || leadsData.length === 0) {
+  if (counsellorData.length === 0) {
     return (
       <div className="nova-crm" style={{ fontFamily: 'Inter, sans-serif' }}>
         <LeftSidebar 
@@ -515,10 +253,58 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           user={user}
         />
         <div className="nova-main">
-          <div className="dashboard-no-data">
-            <div className="dashboard-no-data-title">No leads data available</div>
-            <div className="dashboard-no-data-subtitle">
-              Make sure your leads are properly loaded from the database
+          <div className="dashboard-overview">
+            <div className="dashboard-header">
+              <h2 className="dashboard-title">
+                {getFieldLabel('counsellor')} Performance
+              </h2>
+            </div>
+
+            {/* Date Filter */}
+            <div className="dashboard-date-filter">
+              <span className="dashboard-date-filter-label">Select Date Range</span>
+              
+              <div className="dashboard-date-input-group">
+                <label className="dashboard-date-label">From</label>
+                <input
+                  type="date"
+                  value={dateRange.fromDate}
+                  max={currentDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, fromDate: e.target.value }))}
+                  className="dashboard-date-input"
+                />
+              </div>
+
+              <div className="dashboard-date-input-group">
+                <label className="dashboard-date-label">To</label>
+                <input
+                  type="date"
+                  value={dateRange.toDate}
+                  max={currentDate}
+                  min={dateRange.fromDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, toDate: e.target.value }))}
+                  className="dashboard-date-input"
+                />
+              </div>
+
+              <button onClick={handleSubmit} className="dashboard-submit-btn">
+                Apply Filter
+              </button>
+
+              {dateRange.isActive && (
+                <button onClick={handleClear} className="dashboard-clear-btn">
+                  Clear Filter
+                </button>
+              )}
+            </div>
+
+            <div className="dashboard-no-data">
+              <div className="dashboard-no-data-title">No counsellor data available</div>
+              <div className="dashboard-no-data-subtitle">
+                {dateRange.isActive 
+                  ? 'No achievements found for the selected date range'
+                  : 'Counsellor achievements will appear here once leads reach tracked stages'}
+              </div>
             </div>
           </div>
         </div>
@@ -528,7 +314,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
 
   return (
     <div className="nova-crm" style={{ fontFamily: 'Inter, sans-serif' }}>
-      {/* Left Sidebar */}
       <LeftSidebar 
         activeNavItem="counsellor"
         activeSubmenuItem=""
@@ -540,10 +325,8 @@ const CounsellorPerformance = ({ onLogout, user }) => {
         user={user}
       />
 
-      {/* Main Content */}
       <div className="nova-main">
         <div className="dashboard-overview">
-          {/* Header */}
           <div className="dashboard-header">
             <h2 className="dashboard-title">
               {getFieldLabel('counsellor')} Performance
@@ -552,7 +335,7 @@ const CounsellorPerformance = ({ onLogout, user }) => {
 
           {/* Date Filter Section */}
           <div className="dashboard-date-filter">
-            <span className="dashboard-date-filter-label">Select Date</span>
+            <span className="dashboard-date-filter-label">Select Date Range</span>
             
             <div className="dashboard-date-input-group">
               <label className="dashboard-date-label">From</label>
@@ -578,7 +361,7 @@ const CounsellorPerformance = ({ onLogout, user }) => {
             </div>
 
             <button onClick={handleSubmit} className="dashboard-submit-btn">
-              Submit
+              Apply Filter
             </button>
 
             {dateRange.isActive && (
@@ -588,54 +371,57 @@ const CounsellorPerformance = ({ onLogout, user }) => {
             )}
           </div>
 
-          {/* Conversion Insights */}
+          {dateRange.isActive && (
+            <div className="dashboard-date-info">
+              Showing data from {new Date(dateRange.fromDate).toLocaleDateString()} to {new Date(dateRange.toDate).toLocaleDateString()}
+            </div>
+          )}
+
+          {/* Performance Insights */}
           <div className="counsellor-insights-section">
-            <h3 className="counsellor-insights-title">Conversion Insights</h3>
+            <h3 className="counsellor-insights-title">Performance Insights</h3>
             
             <div className="counsellor-cards-grid">
-              {counsellorData.length > 0 ? (
-                counsellorData.map((counsellor, index) => (
-                  <div key={index} className="counsellor-card">
-                    <div className="counsellor-card-header">
-                      <h4 className="counsellor-name">{counsellor.name}</h4>
-                    </div>
-                    
-                    <div className="counsellor-metrics">
-                      {/* Show only the 3 performance stages */}
-                      {performanceStages.map((stage, stageIndex) => (
-                        <div key={stage.key} className="counsellor-metric">
-                          <div className="counsellor-metric-icon">
-                            <img 
-                              src={stage.key === 'meetingBooked' ? meetingsDoneIcon :
-                                   stage.key === 'visitBooked' ? visitsDoneIcon : 
-                                   registeredIcon} 
-                              alt={stage.name} 
-                              style={{ width: '16px', height: '16px' }}
-                            />
-                          </div>
-                          <span className="counsellor-metric-label">{stage.name}</span>
-                          <span className="counsellor-metric-value">{counsellor[stage.key] || 0}</span>
+              {counsellorData.map((counsellor, index) => (
+                <div key={index} className="counsellor-card">
+                  <div className="counsellor-card-header">
+                    <h4 className="counsellor-name">{counsellor.name}</h4>
+                  </div>
+                  
+                  <div className="counsellor-metrics">
+                    {performanceStages.map((stage) => (
+                      <div key={stage.key} className="counsellor-metric">
+                        <div className="counsellor-metric-icon">
+                          <img 
+                            src={stage.icon} 
+                            alt={stage.name} 
+                            style={{ width: '16px', height: '16px' }}
+                          />
                         </div>
-                      ))}
+                        <span className="counsellor-metric-label">{stage.name}</span>
+                        <span className="counsellor-metric-value">{counsellor[stage.key] || 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="counsellor-percentages">
+                    <div className="counsellor-percent-row">
+                      <span className="counsellor-percent-label">Visit %</span>
+                      <span className="counsellor-percent-value">{counsellor.visitPercent}%</span>
                     </div>
-                    
-                    <div className="counsellor-conversion">
-                      <span className="counsellor-conversion-label">Conversion %</span>
-                      <span className="counsellor-conversion-value">{counsellor.conversionRate}%</span>
+                    <div className="counsellor-percent-row">
+                      <span className="counsellor-percent-label">Admission %</span>
+                      <span className="counsellor-percent-value">{counsellor.admissionPercent}%</span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="counsellor-no-data">
-                  No counsellor data available for the selected period
                 </div>
-              )}
+              ))}
             </div>
           </div>
 
           {/* Charts Section */}
           <div className="counsellor-charts-section">
-            {/* Success Rate Chart - WITH MOBILE SUPPORT */}
+            {/* Success Rate Chart */}
             <div className="counsellor-chart-container">
               <h3 className="counsellor-chart-title">
                 Success Rate by {getFieldLabel('counsellor')}
@@ -647,7 +433,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
                   onChange={(e) => setSelectedMetric(e.target.value)}
                   className="counsellor-metric-dropdown"
                 >
-                  {/* Dynamic options based on the 3 performance stages */}
                   {performanceStages.map(stage => (
                     <option key={stage.key} value={stage.key}>
                       {stage.name}
@@ -658,7 +443,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
               
               {barChartData.length > 0 ? (
                 <>
-                  {/* NEW: Mobile Navigation Controls */}
                   {isMobile && counsellorData.length > 1 && (
                     <div className="mobile-chart-navigation">
                       <button 
@@ -730,7 +514,7 @@ const CounsellorPerformance = ({ onLogout, user }) => {
                   </div>
                   
                   <div className="counsellor-chart-footer">
-                    Currently viewing: {getStageDisplayName(selectedMetric)} this month.
+                    Currently viewing: {getStageDisplayName(selectedMetric)}
                     {isMobile && counsellorData.length > 1 && (
                       <div className="mobile-swipe-hint">
                         Use navigation buttons to view other counsellors
@@ -745,68 +529,75 @@ const CounsellorPerformance = ({ onLogout, user }) => {
               )}
             </div>
 
-            {/* Top Performer */}
-            <div className="counsellor-top-performer">
-              <h3 className="counsellor-top-performer-title">Top Performer</h3>
-              
-              {topPerformer ? (
-                <div className="counsellor-top-performer-content">
-                  <div className="counsellor-trophy-icon">
-                    <img 
-                        src={topPerformerIcon}
-                        alt="Trophy" 
-                        style={{ width: '108px', height: '108px' }}
-                        />
-                  </div>
-                  
-                  <div className="counsellor-top-performer-info">
-                    <div className="counsellor-top-performer-avatar">
-                      {getCounsellorInitials(topPerformer.name)}
-                    </div>
-                    <div className="counsellor-top-performer-name">
-                      {topPerformer.name}
-                    </div>
-                  </div>
-                  
-                  <div className="counsellor-top-performer-stats">
-                    {/* ✅ FIXED: Show registered count and conversion rate */}
-                    <div className="counsellor-top-stat">
-                      <div className="counsellor-top-stat-icon">
-                        <img 
-                          src={registeredIcon} 
-                          alt="Registered" 
-                          style={{ width: '16px', height: '16px' }}
-                        />
+            {/* Top Performers Section - TWO CARDS */}
+            <div className="counsellor-top-performers-container">
+              {/* Visit % Leader */}
+              <div className="counsellor-top-performer">
+                <h3 className="counsellor-top-performer-title">
+                  <TrendingUp size={18} style={{ marginRight: '6px' }} />
+                  Best Visit %
+                </h3>
+                
+                {topVisitPerformer ? (
+                  <div className="counsellor-top-performer-content">
+                    <div className="counsellor-top-performer-info">
+                      <div className="counsellor-top-performer-avatar">
+                        {getCounsellorInitials(topVisitPerformer.name)}
                       </div>
-                      <span className="counsellor-top-stat-label">
-                        {getStageDisplayName('registered')}
-                      </span>
-                      <span className="counsellor-top-stat-value">{topPerformer.registered || 0}</span>
+                      <div className="counsellor-top-performer-name">
+                        {topVisitPerformer.name}
+                      </div>
                     </div>
                     
-                    <div className="counsellor-top-stat">
-                      <div className="counsellor-top-stat-icon">
-                        <Users size={16} color="#F59E0B" />
-                      </div>
-                      <span className="counsellor-top-stat-label">Conversion</span>
-                      <span className="counsellor-top-stat-value">{topPerformer.conversionRate}%</span>
+                    <div className="counsellor-top-performer-percent">
+                      {topVisitPerformer.visitPercent}%
+                    </div>
+                    
+                    <div className="counsellor-top-performer-formula">
+                      ({topVisitPerformer.meetingDone}/{topVisitPerformer.meetingBooked})
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="counsellor-top-performer-empty">
-                  No performance data available
-                </div>
-              )}
+                ) : (
+                  <div className="counsellor-top-performer-empty">
+                    No data available
+                  </div>
+                )}
+              </div>
+
+              {/* Admission % Leader */}
+              <div className="counsellor-top-performer">
+                <h3 className="counsellor-top-performer-title">
+                  <Award size={18} style={{ marginRight: '6px' }} />
+                  Best Admission %
+                </h3>
+                
+                {topAdmissionPerformer ? (
+                  <div className="counsellor-top-performer-content">
+                    <div className="counsellor-top-performer-info">
+                      <div className="counsellor-top-performer-avatar">
+                        {getCounsellorInitials(topAdmissionPerformer.name)}
+                      </div>
+                      <div className="counsellor-top-performer-name">
+                        {topAdmissionPerformer.name}
+                      </div>
+                    </div>
+                    
+                    <div className="counsellor-top-performer-percent">
+                      {topAdmissionPerformer.admissionPercent}%
+                    </div>
+                    
+                    <div className="counsellor-top-performer-formula">
+                      ({topAdmissionPerformer.admission}/{topAdmissionPerformer.meetingDone})
+                    </div>
+                  </div>
+                ) : (
+                  <div className="counsellor-top-performer-empty">
+                    No data available
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          {/* Date Range Info */}
-          {dateRange.isActive && (
-            <div className="dashboard-date-info">
-              Showing data from {dateRange.fromDate} to {dateRange.toDate}
-            </div>
-          )}
         </div>
       </div>
 
@@ -827,16 +618,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           font-weight: 600;
           color: #1f2937;
           margin: 0;
-        }
-
-        .dashboard-date-filter {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          margin-bottom: 24px;
-          padding: 16px;
-          background: #f9fafb;
-          border-radius: 8px;
         }
 
         .counsellor-insights-section {
@@ -897,13 +678,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           height: 24px;
         }
 
-        .counsellor-metric-icon img {
-          width: 16px;
-          height: 16px;
-          object-fit: contain;
-          filter: none;
-        }
-
         .counsellor-metric-label {
           flex: 1;
           font-size: 14px;
@@ -918,23 +692,30 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           text-align: right;
         }
 
-        .counsellor-conversion {
+        .counsellor-percentages {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
+          flex-direction: column;
+          gap: 8px;
           padding-top: 12px;
           border-top: 1px solid #e5e7eb;
         }
 
-        .counsellor-conversion-label {
-          font-size: 14px;
-          color: #6b7280;
+        .counsellor-percent-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
         }
 
-        .counsellor-conversion-value {
+        .counsellor-percent-label {
+          font-size: 14px;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .counsellor-percent-value {
           font-size: 16px;
-          font-weight: 600;
-          color: #1f2937;
+          font-weight: 700;
+          color: #10b981;
         }
 
         .counsellor-charts-section {
@@ -972,12 +753,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           cursor: pointer;
         }
 
-        .counsellor-metric-dropdown:focus {
-          outline: none;
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
         .mobile-chart-navigation {
           display: none;
           align-items: center;
@@ -1007,10 +782,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
 
         .mobile-nav-btn:hover {
           background: #2563eb;
-        }
-
-        .mobile-nav-btn:active {
-          background: #1d4ed8;
         }
 
         .mobile-chart-info {
@@ -1058,6 +829,12 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           color: #6b7280;
         }
 
+        .counsellor-top-performers-container {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
         .counsellor-top-performer {
           background: white;
           border: 1px solid #e5e7eb;
@@ -1066,10 +843,12 @@ const CounsellorPerformance = ({ onLogout, user }) => {
         }
 
         .counsellor-top-performer-title {
-          font-size: 18px;
+          font-size: 16px;
           font-weight: 600;
-          margin-bottom: 20px;
+          margin-bottom: 16px;
           color: #1f2937;
+          display: flex;
+          align-items: center;
         }
 
         .counsellor-top-performer-content {
@@ -1079,12 +858,8 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           text-align: center;
         }
 
-        .counsellor-trophy-icon {
-          margin-bottom: 16px;
-        }
-
         .counsellor-top-performer-info {
-          margin-bottom: 20px;
+          margin-bottom: 12px;
         }
 
         .counsellor-top-performer-avatar {
@@ -1101,60 +876,82 @@ const CounsellorPerformance = ({ onLogout, user }) => {
         }
 
         .counsellor-top-performer-name {
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 600;
           color: #1f2937;
         }
 
-        .counsellor-top-performer-stats {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          width: 100%;
+        .counsellor-top-performer-percent {
+          font-size: 32px;
+          font-weight: 700;
+          color: #10b981;
+          margin-bottom: 4px;
         }
 
-        .counsellor-top-stat {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px;
-          background: #f9fafb;
-          border-radius: 6px;
-        }
-
-        .counsellor-top-stat-icon {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .counsellor-top-stat-icon img {
-          width: 16px;
-          height: 16px;
-          object-fit: contain;
-          filter: none;
-        }
-
-        .counsellor-top-stat-label {
-          flex: 1;
-          font-size: 14px;
+        .counsellor-top-performer-formula {
+          font-size: 12px;
           color: #6b7280;
         }
 
-        .counsellor-top-stat-value {
-          font-size: 14px;
-          font-weight: 600;
-          color: #1f2937;
-        }
-
-        .counsellor-no-data,
         .counsellor-top-performer-empty {
           display: flex;
           align-items: center;
           justify-content: center;
-          height: 120px;
+          height: 100px;
           color: #6b7280;
           font-size: 14px;
+        }
+
+        .dashboard-no-data {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 50vh;
+          text-align: center;
+        }
+
+        .dashboard-no-data-title {
+          font-size: 18px;
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 8px;
+        }
+
+        .dashboard-no-data-subtitle {
+          font-size: 14px;
+          color: #6b7280;
+        }
+
+        .dashboard-pie-tooltip {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          padding: 8px 12px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .dashboard-pie-tooltip-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: #1f2937;
+          margin: 0 0 4px 0;
+        }
+
+        .dashboard-pie-tooltip-value {
+          font-size: 13px;
+          color: #6b7280;
+          margin: 0;
+        }
+
+        .dashboard-date-filter {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 24px;
+          padding: 16px;
+          background: #f9fafb;
+          border-radius: 8px;
         }
 
         .dashboard-date-filter-label {
@@ -1214,56 +1011,13 @@ const CounsellorPerformance = ({ onLogout, user }) => {
           font-size: 14px;
           color: #6b7280;
           text-align: center;
-          margin-top: 16px;
+          margin-bottom: 16px;
           padding: 12px;
           background: #f0f9ff;
           border-radius: 6px;
           border: 1px solid #bae6fd;
         }
 
-        .dashboard-no-data {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 50vh;
-          text-align: center;
-        }
-
-        .dashboard-no-data-title {
-          font-size: 18px;
-          font-weight: 600;
-          color: #374151;
-          margin-bottom: 8px;
-        }
-
-        .dashboard-no-data-subtitle {
-          font-size: 14px;
-          color: #6b7280;
-        }
-
-        .dashboard-pie-tooltip {
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 6px;
-          padding: 8px 12px;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .dashboard-pie-tooltip-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: #1f2937;
-          margin: 0 0 4px 0;
-        }
-
-        .dashboard-pie-tooltip-value {
-          font-size: 13px;
-          color: #6b7280;
-          margin: 0;
-        }
-
-        /* Mobile Responsive Styles */
         @media (max-width: 768px) {
           .counsellor-charts-section {
             grid-template-columns: 1fr;
@@ -1292,16 +1046,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
             gap: 12px;
           }
 
-          .dashboard-date-filter .dashboard-date-input-group {
-            flex-direction: row;
-            align-items: center;
-            gap: 8px;
-          }
-
-          .dashboard-date-label {
-            min-width: 40px;
-          }
-
           .dashboard-overview {
             padding: 16px;
           }
@@ -1324,14 +1068,6 @@ const CounsellorPerformance = ({ onLogout, user }) => {
             width: 36px;
             height: 36px;
             font-size: 16px;
-          }
-
-          .mobile-chart-name {
-            font-size: 13px;
-          }
-
-          .mobile-chart-counter {
-            font-size: 11px;
           }
         }
       `}</style>
