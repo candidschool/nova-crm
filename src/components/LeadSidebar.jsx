@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { achievementsService } from '../services/achievementsService';
 import { useSettingsData } from '../contexts/SettingsDataProvider';
 import { supabase } from '../lib/supabase';
 import { settingsService } from '../services/settingsService';
@@ -10,7 +11,8 @@ import {
   logVisitScheduled,
   logWhatsAppMessage,
   logManualEntry,
-  generateChangeDescription
+  generateChangeDescription,
+  logStageChange
 } from '../utils/historyLogger';
 import { 
   Clipboard,
@@ -90,7 +92,7 @@ const LeadSidebar = ({
   console.log('selectedLead data:', selectedLead);
   
   // Use the context hook for action status updates
-  const { updateActionStatus } = useLeadState();
+  const { updateActionStatus, updateLeadStage } = useLeadState();
   
   // Use settings context for stage functions
   const { 
@@ -101,7 +103,8 @@ const LeadSidebar = ({
     getStageKeyFromName,
     getStageNameFromKey,
     stageMappings,
-    stageKeyToDataMapping
+    stageKeyToDataMapping,
+    getStageScore
   } = useSettingsData();
 
   // Mobile detection
@@ -139,6 +142,14 @@ const LeadSidebar = ({
   // Custom fields states
   const [customFieldsData, setCustomFieldsData] = useState({});
   const [originalCustomFieldsData, setOriginalCustomFieldsData] = useState({});
+
+  // Stage edit state - ALWAYS EDITABLE
+  const [stageEditState, setStageEditState] = useState({
+    originalStage: null,
+    selectedStage: null,
+    comment: '',
+    showComment: false
+  });
 
   // Mobile detection effect
   useEffect(() => {
@@ -189,6 +200,179 @@ const LeadSidebar = ({
   const getStageCategoryForLead = (stageValue) => {
     const stageKey = getLeadStageKey(stageValue);
     return contextGetStageCategory(stageKey) || getCategoryFromStage?.(stageValue) || 'New';
+  };
+
+  // Initialize stage edit state when lead changes
+  useEffect(() => {
+    if (selectedLead) {
+      setStageEditState({
+        originalStage: selectedLead.stage,
+        selectedStage: selectedLead.stage,
+        comment: '',
+        showComment: false
+      });
+    }
+  }, [selectedLead?.id]);
+
+  // Handle stage dropdown change
+  const handleSidebarStageChange = (e) => {
+    const newStage = e.target.value;
+    const showCommentField = newStage !== stageEditState.originalStage;
+    
+    setStageEditState(prev => ({
+      ...prev,
+      selectedStage: newStage,
+      showComment: showCommentField,
+      comment: showCommentField ? prev.comment : ''
+    }));
+  };
+
+  // Handle comment change
+  const handleSidebarCommentChange = (e) => {
+    setStageEditState(prev => ({
+      ...prev,
+      comment: e.target.value
+    }));
+  };
+
+  // Handle stage submit (auto-submit on Enter or blur)
+  // Handle stage submit (auto-submit on Enter or blur)
+const handleSidebarStageSubmit = async () => {
+  // If stage hasn't changed, just close
+  if (stageEditState.originalStage === stageEditState.selectedStage) {
+    setStageEditState(prev => ({
+      ...prev,
+      comment: '',
+      showComment: false
+    }));
+    return;
+  }
+
+  // If no comment and stage changed, revert to original
+  if (!stageEditState.comment.trim()) {
+    setStageEditState(prev => ({
+      ...prev,
+      selectedStage: prev.originalStage,
+      comment: '',
+      showComment: false
+    }));
+    return;
+  }
+
+  try {
+    const oldStageKey = stageEditState.originalStage;
+    const newStageKey = stageEditState.selectedStage;
+
+    const oldStageName = getLeadStageDisplayName(oldStageKey);
+    const newStageName = getLeadStageDisplayName(newStageKey);
+
+    const updatedScore = getStageScore(newStageKey);
+    const updatedCategory = contextGetStageCategory(newStageKey);
+
+    // ✅ NEW: Track achievement BEFORE updating the lead
+    if (oldStageKey !== newStageKey) {
+      console.log('🎯 Stage changed in sidebar, tracking achievement...');
+      
+      // Get counsellor user_id
+      const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(selectedLead.counsellor);
+      
+      if (!userIdError && userId) {
+        // Record achievement with lead_id and timestamp
+        await achievementsService.recordStageAchievement(
+          selectedLead.counsellor,
+          userId,
+          newStageKey,
+          selectedLead.id
+        );
+      } else {
+        console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', selectedLead.counsellor);
+      }
+    }
+
+    // Log stage change with comment
+    const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via sidebar.  Comment: "${stageEditState.comment}". Current Stage is  "${newStageName}".`;
+    await logStageChange(selectedLead.id, oldStageName, newStageName, 'sidebar with comment');
+    
+    const { error: logError } = await supabase
+      .from(TABLE_NAMES.LOGS)
+      .insert([{
+        main_action: 'Stage Updated',
+        description: descriptionWithComment,
+        table_name: TABLE_NAMES.LEADS,
+        record_id: selectedLead.id.toString(),
+        action_timestamp: new Date().toISOString()
+      }]);
+
+    if (logError) console.error('Error logging stage change with comment:', logError);
+
+    let updateData = { 
+      stage: newStageKey,
+      score: updatedScore, 
+      category: updatedCategory,
+      updated_at: new Date().toISOString()
+    };
+
+    const noResponseKey = getStageKeyFromName('No Response');
+    if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
+      updateData.previous_stage = oldStageKey;
+    }
+
+    if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
+      updateData.previous_stage = null;
+    }
+
+    const { error } = await supabase
+      .from(TABLE_NAMES.LEADS)
+      .update(updateData)
+      .eq('id', selectedLead.id);
+
+    if (error) throw error;
+
+    // Update context state
+    updateLeadStage(selectedLead.id, newStageKey, getStageScore, contextGetStageCategory, getLeadStageDisplayName);
+
+    // Refresh activity data
+    if (onRefreshActivityData) {
+      await onRefreshActivityData();
+    }
+
+    // Refresh single lead to get updated data
+    if (onRefreshSingleLead) {
+      await onRefreshSingleLead(selectedLead.id);
+    }
+
+    // Reset stage edit state
+    setStageEditState({
+      originalStage: newStageKey,
+      selectedStage: newStageKey,
+      comment: '',
+      showComment: false
+    });
+
+    // Refresh history if on history tab
+    if (activeTab === 'history') {
+      fetchHistory();
+    }
+
+    alert('Stage updated successfully');
+    
+  } catch (error) {
+    console.error('Error updating stage:', error);
+    alert('Error updating stage: ' + error.message);
+  }
+};
+
+  // Handle blur/outside click on comment field
+  const handleSidebarStageBlur = () => {
+    if (!stageEditState.comment.trim() && stageEditState.selectedStage !== stageEditState.originalStage) {
+      // Revert to original if no comment
+      setStageEditState(prev => ({
+        ...prev,
+        selectedStage: prev.originalStage,
+        comment: '',
+        showComment: false
+      }));
+    }
   };
 
   // Handle status updates from action buttons
@@ -869,24 +1053,65 @@ const LeadSidebar = ({
 
             {/* Right Column */}
             <div>
-              {/* Stage - Display Only */}
+              {/* Stage - Always Editable with Inline Comment */}
               <div className="lead-sidebar-info-row">
                 <label className="lead-sidebar-stage-label">
                   Stage
                 </label>
                 <div 
-                  className="lead-sidebar-stage-badge" 
                   style={{ 
-                    backgroundColor: getStageColorForLead(currentStageKey),
-                    color: '#333',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    display: 'inline-block'
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '8px',
+                    width: '100%'
                   }}
                 >
-                  {currentStageDisplayName}
+                  <select
+                    value={stageEditState.selectedStage || ''}
+                    onChange={handleSidebarStageChange}
+                    className="lead-sidebar-form-select"
+                    style={{
+                      backgroundColor: getStageColorForLead(stageEditState.selectedStage),
+                      color: '#333',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      border: '1px solid #ddd', 
+                      width:'160px'
+                    }}
+                  >
+                    {stages.map(stage => (
+                      <option key={stage.value} value={stage.value}>
+                        {stage.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {stageEditState.showComment && (
+                    <input
+                      type="text"
+                      value={stageEditState.comment}
+                      onChange={handleSidebarCommentChange}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSidebarStageSubmit();
+                        }
+                      }}
+                      onBlur={handleSidebarStageBlur}
+                      placeholder="Enter comment (required)"
+                      className="lead-sidebar-form-input"
+                      style={{
+                        padding: '6px 8px',
+                        fontSize: '13px',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        outline: 'none'
+                      }}
+                      autoFocus
+                    />
+                  )}
                 </div>
               </div>
 
