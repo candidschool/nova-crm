@@ -568,7 +568,7 @@ const InfoTab = ({
       <div className="lead-sidebar-section">
         <div className="lead-sidebar-section-layout">
           <div className="lead-sidebar-section-title-container">
-            <h6 className="lead-sidebar-section-title">Visit Details</h6>
+            <h6 className="lead-sidebar-section-title">Session Booked</h6>
           </div>
           <div className="lead-sidebar-section-content" style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
             {showVisitConfirmation && (
