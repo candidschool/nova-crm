@@ -486,8 +486,8 @@ const CalendarPage = ({ onLogout, user }) => {
                 value={eventType}
                 onChange={(e) => setEventType(e.target.value)}
               >
-                <option value="meeting">Meetings</option>
-                <option value="visit">Visits</option>
+                <option value="meeting">Session Booked</option>
+                <option value="visit">Visit Booked</option>
               </select>
             </div>
 
