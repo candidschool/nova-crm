@@ -16,8 +16,11 @@ import {
 } from 'lucide-react';
 import LeftSidebar from './LeftSidebar';
 import { settingsService } from '../services/settingsService';
+import { useSettingsData } from '../contexts/SettingsDataProvider';
+
 
 const SettingsPage = ({ onLogout, user }) => {
+  const { refreshSettingsData } = useSettingsData();
   // Database states
   const [settingsData, setSettingsData] = useState({
     stages: [],
@@ -40,6 +43,10 @@ const SettingsPage = ({ onLogout, user }) => {
   // Loading states
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Display Preferences State
+  const [leadsPerPage, setLeadsPerPage] = useState(50);
+  const [savingDisplayPrefs, setSavingDisplayPrefs] = useState(false);
 
   // School Profile State
   const [schoolProfile, setSchoolProfile] = useState({
@@ -423,6 +430,10 @@ const SettingsPage = ({ onLogout, user }) => {
         academicYearFrom: data.school.academic_year_from || '',
         academicYearTo: data.school.academic_year_to || ''
       });
+
+      // Load display preferences
+     const displayPrefs = await settingsService.getDisplayPreferences();
+      setLeadsPerPage(displayPrefs.per_page || 50);
     } catch (error) {
       console.error('Error loading settings:', error);
       alert('Error loading settings: ' + error.message);
@@ -459,6 +470,27 @@ const SettingsPage = ({ onLogout, user }) => {
       setSaving(false);
     }
   };
+
+  const handleSaveDisplayPreferences = async () => {
+  try {
+    setSavingDisplayPrefs(true);
+    await settingsService.updateDisplayPreferences(leadsPerPage);
+    
+    // Refresh local settings
+    await loadSettings();
+    
+    // Refresh global context settings
+    refreshSettingsData();
+    
+    alert('Display preferences saved successfully!');
+  } catch (error) {
+    console.error('Error saving display preferences:', error);
+    alert('Error saving display preferences: ' + error.message);
+  } finally {
+    setSavingDisplayPrefs(false);
+  }
+};
+
 
   const addNewFormField = async () => {
     if (customFieldData.fieldName.trim()) {
@@ -932,10 +964,59 @@ const SettingsPage = ({ onLogout, user }) => {
                 </>
               )}
             </div>
-          </div> 
+        </div>
 
-          {/* Two column section - Counsellors, Sources, Grades */}
-          <div className='settings-two-column-row'>
+        {/* Display Preferences Section */}
+        <div className="settings-section">
+          <h2>Display Preferences</h2>
+          <div className="settings-section-content">
+            <div className="settings-display-prefs">
+              <div className="settings-field-group">
+                <label>Leads Per Page</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <select
+                    value={leadsPerPage}
+                    onChange={(e) => setLeadsPerPage(parseInt(e.target.value))}
+                    className="settings-display-prefs-select"
+                  >
+                    <option value="50">50 leads</option>
+                    <option value="100">100 leads</option>
+                    <option value="250">250 leads</option>
+                    <option value="1000">1000 leads</option>
+                  </select>
+                  <span style={{ 
+                    fontSize: '13px', 
+                    color: '#6b7280',
+                    flex: 1
+                  }}>
+                    Choose how many leads to display per page
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="settings-footer">
+              <button 
+                className="settings-update-btn" 
+                onClick={handleSaveDisplayPreferences}
+                disabled={savingDisplayPrefs}
+              >
+                {savingDisplayPrefs ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    Save Display Preferences
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+           
+        <div className='settings-two-column-row'>
             {/* Counsellors Section */}
             <div className="settings-section">
               <h2>Counsellors</h2>
