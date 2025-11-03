@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { settingsService } from '../services/settingsService';
+import { achievementsService } from '../services/achievementsService';
 import { logStageChange } from '../utils/historyLogger';
 import AddLeadForm from './AddLeadForm';
 import LeftSidebar from './LeftSidebar';
 import LeadSidebar from './LeadSidebar';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
+import BulkAssignDialog from './BulkAssignDialog';
 import FilterDropdown, { FilterButton, applyFilters } from './FilterDropdown';
 import LeadStateProvider,{ useLeadState } from './LeadStateProvider';
 import SettingsDataProvider, { useSettingsData } from '../contexts/SettingsDataProvider';
@@ -36,7 +38,8 @@ import {
   CheckCircle,
   Trash2,
   Plus,
-  X
+  X,
+  Users
 } from 'lucide-react';
 
 const HotLeads = ({ onLogout, user }) => {
@@ -125,7 +128,7 @@ const [statusFilters, setStatusFilters] = useState([]);
 const [sourceFilters, setSourceFilters] = useState([]);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const leadsPerPage = 1000;
+  const leadsPerPage = settingsData.displayPrefs?.leadsPerPage || 50;
 
   const stages = settingsData.stages.map(stage => ({
     value: stage.stage_key || stage.name,
@@ -615,105 +618,125 @@ const [sourceFilters, setSourceFilters] = useState([]);
     });
   };
 
-  const handleStageModalSubmit = async () => {
-    if (!stageChangeModal.comment.trim()) {
-      setStageChangeModal(prev => ({
-        ...prev,
-        error: 'Please add a comment before submitting'
-      }));
-      return;
-    }
+ const handleStageModalSubmit = async () => {
+  if (!stageChangeModal.comment.trim()) {
+    setStageChangeModal(prev => ({
+      ...prev,
+      error: 'Please add a comment before submitting'
+    }));
+    return;
+  }
 
-    if (!stageChangeModal.selectedStage) {
-      setStageChangeModal(prev => ({
-        ...prev,
-        error: 'Please select a stage'
-      }));
-      return;
-    }
+  if (!stageChangeModal.selectedStage) {
+    setStageChangeModal(prev => ({
+      ...prev,
+      error: 'Please select a stage'
+    }));
+    return;
+  }
 
-    try {
-      const lead = leadsData.find(l => l.id === stageChangeModal.leadId);
-      const oldStageKey = lead.stage;
-      const newStageKey = stageChangeModal.selectedStage;
+  try {
+    const lead = leadsData.find(l => l.id === stageChangeModal.leadId);
+    const oldStageKey = lead.stage;
+    const newStageKey = stageChangeModal.selectedStage;
 
-      const oldStageName = getStageDisplayName(oldStageKey);
-      const newStageName = getStageDisplayName(newStageKey);
+    const oldStageName = getStageDisplayName(oldStageKey);
+    const newStageName = getStageDisplayName(newStageKey);
 
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
+    const updatedScore = getStageScore(newStageKey);
+    const updatedCategory = getStageCategory(newStageKey);
 
-      if (oldStageKey !== newStageKey) {
-        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table. <span class="current-stage">Current Stage is "${newStageName}"</span>. Comment: "${stageChangeModal.comment}"`;
-        await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
-        
-        const { error: logError } = await supabase
-          .from(TABLE_NAMES.LOGS)
-          .insert([{
-            main_action: 'Stage Updated',
-            description: descriptionWithComment,
-            table_name: TABLE_NAMES.LEADS,
-            record_id: stageChangeModal.leadId.toString(),
-            action_timestamp: new Date().toISOString()
-          }]);
-
-        if (logError) console.error('Error logging stage change with comment:', logError);
-      }
-
-      let updateData = { 
-        stage: newStageKey,
-        score: updatedScore, 
-        category: updatedCategory,
-        updated_at: new Date().toISOString()
-      };
-
-      const noResponseKey = getStageKeyFromName('No Response');
-      if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
-        updateData.previous_stage = oldStageKey;
-      }
-
-      if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
-        updateData.previous_stage = null;
-      }
-
-      const { error } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .update(updateData)
-        .eq('id', stageChangeModal.leadId);
-
-      if (error) {
-        throw error;
-      }
-
-      const updatedLeads = leadsData.map(lead => 
-        lead.id === stageChangeModal.leadId 
-          ? { 
-              ...lead, 
-              stage: newStageKey, 
-              stageDisplayName: newStageName,
-              score: updatedScore, 
-              category: updatedCategory 
-            }
-          : lead
-      );
+    // ✅ Track achievement BEFORE updating the lead
+    if (oldStageKey !== newStageKey) {
+      console.log('🎯 Stage changed, tracking achievement...');
       
-      setLeadsData(updatedLeads);
-
-      setLatestComments(prev => ({
-        ...prev,
-        [stageChangeModal.leadId]: stageChangeModal.comment
-      }));
-
-      closeStageChangeModal();
+      // Get counsellor user_id
+      const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(lead.counsellor);
       
-    } catch (error) {
-      console.error('Error updating stage:', error);
-      setStageChangeModal(prev => ({
-        ...prev,
-        error: 'Error updating stage: ' + error.message
-      }));
+      if (!userIdError && userId) {
+        // ✅ FIXED: Record achievement with lead_id and timestamp
+        await achievementsService.recordStageAchievement(
+          lead.counsellor,
+          userId,
+          newStageKey,
+          stageChangeModal.leadId
+        );
+      } else {
+        console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', lead.counsellor);
+      }
+
+      // Existing logging code
+      const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table.  Comment: "${stageChangeModal.comment}". Current Stage is  "${newStageName}".`;
+      await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
+      
+      // Log the comment separately
+      const { error: logError } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .insert([{
+          main_action: 'Stage Updated',
+          description: descriptionWithComment,
+          table_name: TABLE_NAMES.LEADS,
+          record_id: stageChangeModal.leadId.toString(),
+          action_timestamp: new Date().toISOString()
+        }]);
+
+      if (logError) console.error('Error logging stage change with comment:', logError);
     }
-  };
+
+    let updateData = { 
+      stage: newStageKey,
+      score: updatedScore, 
+      category: updatedCategory,
+      updated_at: new Date().toISOString()
+    };
+
+    const noResponseKey = getStageKeyFromName('No Response');
+    if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
+      updateData.previous_stage = oldStageKey;
+    }
+
+    if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
+      updateData.previous_stage = null;
+    }
+
+    const { error } = await supabase
+      .from(TABLE_NAMES.LEADS)
+      .update(updateData)
+      .eq('id', stageChangeModal.leadId);
+
+    if (error) {
+      throw error;
+    }
+
+    const updatedLeads = leadsData.map(lead => 
+      lead.id === stageChangeModal.leadId 
+        ? { 
+            ...lead, 
+            stage: newStageKey, 
+            stageDisplayName: newStageName,
+            score: updatedScore, 
+            category: updatedCategory 
+          }
+        : lead
+    );
+    
+    setLeadsData(updatedLeads);
+
+    setLatestComments(prev => ({
+      ...prev,
+      [stageChangeModal.leadId]: stageChangeModal.comment
+    }));
+
+    closeStageChangeModal();
+    
+  } catch (error) {
+    console.error('Error updating stage:', error);
+    setStageChangeModal(prev => ({
+      ...prev,
+      error: 'Error updating stage: ' + error.message
+    }));
+  }
+};
 
   const handleAddLead = async (action = 'add') => {
     await fetchLeads();
