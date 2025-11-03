@@ -20,10 +20,10 @@ const SettingsDataProvider = ({ children }) => {
     counsellors: [],
     sources: [],
     grades: [],
-    formFields: []
+    formFields: [],
+    displayPrefs: { leadsPerPage: 50 } // ✅ NEW: Added display preferences
   });
 
-  // ← UPDATED: Added secondPhone to field labels
   const [fieldLabels, setFieldLabels] = useState({
     // Static fields (never change their labels)
     parentsName: 'Parents Name',
@@ -36,7 +36,7 @@ const SettingsDataProvider = ({ children }) => {
     source: 'Source',
     
     // Dynamic fields (labels can change based on settings)
-    secondPhone: 'Second Phone', // ← NEW: Added secondPhone
+    secondPhone: 'Second Phone',
     offer: 'Offer',
     occupation: 'Occupation',
     location: 'Location',
@@ -122,6 +122,16 @@ const SettingsDataProvider = ({ children }) => {
       console.log('Stages from database:', stages);
       console.log('Counsellors from database:', counsellors);
       
+      // ✅ NEW: Fetch display preferences
+      let displayPrefs = { leadsPerPage: 50 }; // default
+      try {
+        const prefs = await settingsService.getDisplayPreferences();
+        displayPrefs = { leadsPerPage: prefs.per_page || 50 };
+        console.log('Display preferences loaded:', displayPrefs);
+      } catch (error) {
+        console.error('Error fetching display preferences:', error);
+      }
+      
       // Create direct mappings for form fields
       const newFieldMappings = {};
       const updatedLabels = { ...fieldLabels };
@@ -178,10 +188,11 @@ const SettingsDataProvider = ({ children }) => {
       // Set all state
       setSettingsData({
         stages,
-        counsellors, // Now includes hasUserAccount flag
+        counsellors,
         sources,
         grades,
-        formFields
+        formFields,
+        displayPrefs // ✅ NEW: Added display preferences
       });
       
       setFieldMappings(newFieldMappings);
@@ -196,7 +207,7 @@ const SettingsDataProvider = ({ children }) => {
     }
   };
 
-  // ← UPDATED: Check if field is static (label never changes) - added secondPhone exception
+  // Check if field is static (label never changes)
   const isStaticField = (fieldKey) => {
     const staticFields = ['parentsName', 'kidsName', 'phone', 'email', 'grade', 'counsellor', 'stage', 'source'];
     return staticFields.includes(fieldKey);
@@ -277,6 +288,7 @@ const SettingsDataProvider = ({ children }) => {
     stageMappings,
     stageKeyToDataMapping,
     loading,
+    displayPrefs: settingsData.displayPrefs, // ✅ NEW: Exposed display preferences
     
     // Helper functions for fields
     getFieldLabel,
