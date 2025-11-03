@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { settingsService } from '../services/settingsService';
+import { achievementsService } from '../services/achievementsService'; 
 import { logStageChange } from '../utils/historyLogger';
 import AddLeadForm from './AddLeadForm';
 import LeftSidebar from './LeftSidebar';
 import LeadSidebar from './LeadSidebar';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import ExportLeadsDialog from './ExportLeadsDialog';
+import BulkAssignDialog from './BulkAssignDialog';
 import FilterDropdown, { FilterButton, applyFilters } from './FilterDropdown';
 import { useLeadState } from './LeadStateProvider';
 import SettingsDataProvider, { useSettingsData } from '../contexts/SettingsDataProvider';
@@ -38,7 +40,8 @@ import {
   Trash2,
   Plus,
   X,
-  Download
+  Download,
+  Users
 } from 'lucide-react';
 
 const LeadsTable = ({ onLogout }) => {
@@ -98,6 +101,8 @@ const LeadsTable = ({ onLogout }) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+
 
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [sidebarFormData, setSidebarFormData] = useState({
@@ -134,7 +139,7 @@ const [statusFilters, setStatusFilters] = useState([]);
 const [sourceFilters, setSourceFilters] = useState([]);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const leadsPerPage = 1000;
+  const leadsPerPage = settingsData.displayPrefs?.leadsPerPage || 50;
 
   const stages = settingsData.stages.map(stage => ({
     value: stage.stage_key || stage.name,
@@ -341,6 +346,22 @@ const handleExportClick = () => {
 
 const handleExportCancel = () => {
   setShowExportDialog(false);
+};
+
+const handleAssignClick = () => {
+  if (selectedLeads.length > 0) {
+    setShowAssignDialog(true);
+  }
+};
+
+const handleAssignCancel = () => {
+  setShowAssignDialog(false);
+};
+
+const handleAssignComplete = async () => {
+  await fetchLeads();
+  setSelectedLeads([]);
+  setSelectAll(false);
 };
 
   useEffect(() => {
@@ -661,105 +682,124 @@ const handleExportCancel = () => {
   };
 
   const handleStageModalSubmit = async () => {
-    if (!stageChangeModal.comment.trim()) {
-      setStageChangeModal(prev => ({
-        ...prev,
-        error: 'Please add a comment before submitting'
-      }));
-      return;
-    }
+  if (!stageChangeModal.comment.trim()) {
+    setStageChangeModal(prev => ({
+      ...prev,
+      error: 'Please add a comment before submitting'
+    }));
+    return;
+  }
 
-    if (!stageChangeModal.selectedStage) {
-      setStageChangeModal(prev => ({
-        ...prev,
-        error: 'Please select a stage'
-      }));
-      return;
-    }
+  if (!stageChangeModal.selectedStage) {
+    setStageChangeModal(prev => ({
+      ...prev,
+      error: 'Please select a stage'
+    }));
+    return;
+  }
 
-    try {
-      const lead = leadsData.find(l => l.id === stageChangeModal.leadId);
-      const oldStageKey = lead.stage;
-      const newStageKey = stageChangeModal.selectedStage;
+  try {
+    const lead = leadsData.find(l => l.id === stageChangeModal.leadId);
+    const oldStageKey = lead.stage;
+    const newStageKey = stageChangeModal.selectedStage;
 
-      const oldStageName = getStageDisplayName(oldStageKey);
-      const newStageName = getStageDisplayName(newStageKey);
+    const oldStageName = getStageDisplayName(oldStageKey);
+    const newStageName = getStageDisplayName(newStageKey);
 
-      const updatedScore = getStageScore(newStageKey);
-      const updatedCategory = getStageCategory(newStageKey);
+    const updatedScore = getStageScore(newStageKey);
+    const updatedCategory = getStageCategory(newStageKey);
 
-      if (oldStageKey !== newStageKey) {
-        const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table.  Comment: "${stageChangeModal.comment}". Current Stage is  "${newStageName}".`;
-        await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
-        
-        // Log the comment separately
-        const { error: logError } = await supabase
-          .from(TABLE_NAMES.LOGS)
-          .insert([{
-            main_action: 'Stage Updated',
-            description: descriptionWithComment,
-            table_name: TABLE_NAMES.LEADS,
-            record_id: stageChangeModal.leadId.toString(),
-            action_timestamp: new Date().toISOString()
-          }]);
-
-        if (logError) console.error('Error logging stage change with comment:', logError);
-      }
-
-      let updateData = { 
-        stage: newStageKey,
-        score: updatedScore, 
-        category: updatedCategory,
-        updated_at: new Date().toISOString()
-      };
-
-      const noResponseKey = getStageKeyFromName('No Response');
-      if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
-        updateData.previous_stage = oldStageKey;
-      }
-
-      if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
-        updateData.previous_stage = null;
-      }
-
-      const { error } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .update(updateData)
-        .eq('id', stageChangeModal.leadId);
-
-      if (error) {
-        throw error;
-      }
-
-      const updatedLeads = leadsData.map(lead => 
-        lead.id === stageChangeModal.leadId 
-          ? { 
-              ...lead, 
-              stage: newStageKey, 
-              stageDisplayName: newStageName,
-              score: updatedScore, 
-              category: updatedCategory 
-            }
-          : lead
-      );
+    // ✅ Track achievement BEFORE updating the lead
+    if (oldStageKey !== newStageKey) {
+      console.log('🎯 Stage changed, tracking achievement...');
       
-      setLeadsData(updatedLeads);
-
-      setLatestComments(prev => ({
-        ...prev,
-        [stageChangeModal.leadId]: stageChangeModal.comment
-      }));
-
-      closeStageChangeModal();
+      // Get counsellor user_id
+      const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(lead.counsellor);
       
-    } catch (error) {
-      console.error('Error updating stage:', error);
-      setStageChangeModal(prev => ({
-        ...prev,
-        error: 'Error updating stage: ' + error.message
-      }));
+      if (!userIdError && userId) {
+        // ✅ FIXED: Record achievement with lead_id and timestamp
+        await achievementsService.recordStageAchievement(
+          lead.counsellor,
+          userId,
+          newStageKey,
+          stageChangeModal.leadId
+        );
+      } else {
+        console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', lead.counsellor);
+      }
+
+      // Existing logging code
+      const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table.  Comment: "${stageChangeModal.comment}". Current Stage is  "${newStageName}".`;
+      await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
+      
+      // Log the comment separately
+      const { error: logError } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .insert([{
+          main_action: 'Stage Updated',
+          description: descriptionWithComment,
+          table_name: TABLE_NAMES.LEADS,
+          record_id: stageChangeModal.leadId.toString(),
+          action_timestamp: new Date().toISOString()
+        }]);
+
+      if (logError) console.error('Error logging stage change with comment:', logError);
     }
-  };
+
+    let updateData = { 
+      stage: newStageKey,
+      score: updatedScore, 
+      category: updatedCategory,
+      updated_at: new Date().toISOString()
+    };
+
+    const noResponseKey = getStageKeyFromName('No Response');
+    if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
+      updateData.previous_stage = oldStageKey;
+    }
+
+    if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
+      updateData.previous_stage = null;
+    }
+
+    const { error } = await supabase
+      .from(TABLE_NAMES.LEADS)
+      .update(updateData)
+      .eq('id', stageChangeModal.leadId);
+
+    if (error) {
+      throw error;
+    }
+
+    const updatedLeads = leadsData.map(lead => 
+      lead.id === stageChangeModal.leadId 
+        ? { 
+            ...lead, 
+            stage: newStageKey, 
+            stageDisplayName: newStageName,
+            score: updatedScore, 
+            category: updatedCategory 
+          }
+        : lead
+    );
+    
+    setLeadsData(updatedLeads);
+
+    setLatestComments(prev => ({
+      ...prev,
+      [stageChangeModal.leadId]: stageChangeModal.comment
+    }));
+
+    closeStageChangeModal();
+    
+  } catch (error) {
+    console.error('Error updating stage:', error);
+    setStageChangeModal(prev => ({
+      ...prev,
+      error: 'Error updating stage: ' + error.message
+    }));
+  }
+};
 
   const handleAddLead = async (action = 'add') => {
     await fetchLeads();
@@ -969,7 +1009,33 @@ const handleExportCancel = () => {
     </button>
   )}
 
-  {selectedLeads.length > 0 && (
+{selectedLeads.length > 0 && (
+  <>
+    {user.role === 'admin' && (
+      <button 
+        className="export-selected-btn" 
+        onClick={handleAssignClick}
+        style={{
+          padding: '8px 16px',
+          backgroundColor: '#2563eb',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: '500',
+          transition: 'all 0.2s'
+        }}
+        onMouseOver={(e) => e.target.style.backgroundColor = '#1d4ed8'}
+        onMouseOut={(e) => e.target.style.backgroundColor = '#2563eb'}
+      >
+        <Users size={16} />
+        Bulk Assign {selectedLeads.length} Selected
+      </button>
+    )}
     <button 
       className="export-selected-btn" 
       onClick={handleExportClick}
@@ -993,7 +1059,9 @@ const handleExportCancel = () => {
       <Download size={16} />
       Export {selectedLeads.length} Selected
     </button>
-  )}
+  </>
+)}
+
 </div>
           </div>
           <div className="header-right">
@@ -1276,6 +1344,15 @@ const handleExportCancel = () => {
   onClose={handleExportCancel}
   selectedLeads={selectedLeads}
   leadsData={leadsData}
+/>
+
+<BulkAssignDialog
+  isOpen={showAssignDialog}
+  onClose={handleAssignCancel}
+  selectedLeads={selectedLeads}
+  leadsData={leadsData}
+  counsellors={settingsData.counsellors}
+  onAssignComplete={handleAssignComplete}
 />
 
       {showAddForm && (
