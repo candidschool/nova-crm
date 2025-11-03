@@ -486,8 +486,8 @@ const CalendarPage = ({ onLogout, user }) => {
                 value={eventType}
                 onChange={(e) => setEventType(e.target.value)}
               >
-                <option value="meeting">Session Booked</option>
-                <option value="visit">Visit Booked</option>
+                <option value="meeting">Call Booked</option>
+                <option value="visit">Session Booked</option>
               </select>
             </div>
 
@@ -686,3 +686,4 @@ const CalendarPage = ({ onLogout, user }) => {
 
 
 export default CalendarPage;
+
