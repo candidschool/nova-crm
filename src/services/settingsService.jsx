@@ -97,7 +97,7 @@ export const settingsService = {
           auth_id: authData.user.id,
           email: email,
           full_name: name,
-          role: role, // ✅ NEW: Use role from counsellorData
+          role: role,
           is_active: true
         }])
         .select()
@@ -174,7 +174,7 @@ export const settingsService = {
       const userUpdates = {
         full_name: name,
         email: email,
-        role: role // ✅ NEW: Update role
+        role: role
       };
 
       const { error: userUpdateError } = await supabase
@@ -861,6 +861,71 @@ export const settingsService = {
           value: schoolData
         }]);
       if (error) throw error;
+    }
+  },
+
+  // ✅ NEW: Display Preferences Management
+  async getDisplayPreferences() {
+    try {
+      const { data, error } = await supabase
+        .from(TABLE_NAMES.SETTINGS)
+        .select('*')
+        .eq('type', 'display_preferences')
+        .eq('name', 'leads_per_page')
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      // Return default if not found
+      if (!data) {
+        return { per_page: 50 };
+      }
+      
+      return data.value || { per_page: 50 };
+    } catch (error) {
+      console.error('Error fetching display preferences:', error);
+      return { per_page: 50 };
+    }
+  },
+
+  async updateDisplayPreferences(perPage) {
+    try {
+      const { data: existing } = await supabase
+        .from(TABLE_NAMES.SETTINGS)
+        .select('id')
+        .eq('type', 'display_preferences')
+        .eq('name', 'leads_per_page')
+        .single();
+      
+      if (existing) {
+        // Update existing
+        const { error } = await supabase
+          .from(TABLE_NAMES.SETTINGS)
+          .update({ 
+            value: { per_page: parseInt(perPage) }
+          })
+          .eq('id', existing.id);
+        
+        if (error) throw error;
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from(TABLE_NAMES.SETTINGS)
+          .insert([{
+            type: 'display_preferences',
+            name: 'leads_per_page',
+            value: { per_page: parseInt(perPage) },
+            sort_order: 0,
+            is_active: true
+          }]);
+        
+        if (error) throw error;
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating display preferences:', error);
+      throw error;
     }
   },
 
