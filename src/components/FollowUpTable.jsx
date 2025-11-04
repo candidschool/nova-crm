@@ -891,6 +891,7 @@ const FollowUpTable = ({ onLogout, user }) => {
         const lead = row.leadData;
         const searchLower = searchTerm.toLowerCase();
         return (
+          lead.id?.toString().includes(searchTerm) ||
           lead.parentsName?.toLowerCase().includes(searchLower) ||
           lead.kidsName?.toLowerCase().includes(searchLower) ||
           lead.phone?.toLowerCase().includes(searchLower) ||
