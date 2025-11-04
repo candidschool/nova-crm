@@ -673,42 +673,40 @@ const [sourceFilters, setSourceFilters] = useState([]);
     const updatedScore = getStageScore(newStageKey);
     const updatedCategory = getStageCategory(newStageKey);
 
-    // ✅ Track achievement BEFORE updating the lead
-    if (oldStageKey !== newStageKey) {
-      console.log('🎯 Stage changed, tracking achievement...');
-      
-      // Get counsellor user_id
-      const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(lead.counsellor);
-      
-      if (!userIdError && userId) {
-        // ✅ FIXED: Record achievement with lead_id and timestamp
-        await achievementsService.recordStageAchievement(
-          lead.counsellor,
-          userId,
-          newStageKey,
-          stageChangeModal.leadId
-        );
-      } else {
-        console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', lead.counsellor);
-      }
+    // Track achievement BEFORE updating the lead
+if (oldStageKey !== newStageKey) {
+  console.log('🎯 Stage changed, tracking achievement...');
+  
+  // Get counsellor user_id
+  const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(lead.counsellor);
+  
+  if (!userIdError && userId) {
+    await achievementsService.recordStageAchievement(
+      lead.counsellor,
+      userId,
+      newStageKey,
+      stageChangeModal.leadId
+    );
+  } else {
+    console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', lead.counsellor);
+  }
 
-      // Existing logging code
-      const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table.  Comment: "${stageChangeModal.comment}". Current Stage is  "${newStageName}".`;
-      await logStageChange(stageChangeModal.leadId, oldStageName, newStageName, 'table with comment');
-      
-      // Log the comment separately
-      const { error: logError } = await supabase
-        .from(TABLE_NAMES.LOGS)
-        .insert([{
-          main_action: 'Stage Updated',
-          description: descriptionWithComment,
-          table_name: TABLE_NAMES.LEADS,
-          record_id: stageChangeModal.leadId.toString(),
-          action_timestamp: new Date().toISOString()
-        }]);
+  // Log the stage change with comment
+  const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via table.  Comment: "${stageChangeModal.comment}". Current Stage is  "${newStageName}".`;
+  
+  const { error: logError } = await supabase
+    .from(TABLE_NAMES.LOGS)
+    .insert([{
+      main_action: 'Stage Updated',
+      description: descriptionWithComment,
+      table_name: TABLE_NAMES.LEADS,
+      record_id: stageChangeModal.leadId.toString(),
+      action_timestamp: new Date().toISOString(),
+      performed_by: user.full_name
+    }]);
 
-      if (logError) console.error('Error logging stage change with comment:', logError);
-    }
+  if (logError) console.error('Error logging stage change with comment:', logError);
+}
 
     let updateData = { 
       stage: newStageKey,
