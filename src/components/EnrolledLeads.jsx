@@ -813,17 +813,18 @@ if (oldStageKey !== newStageKey) {
       setFilteredLeads([]);
     } else {
       const filtered = leadsData.filter(lead => 
-        lead.parentsName.toLowerCase().includes(term.toLowerCase()) ||
-        lead.kidsName.toLowerCase().includes(term.toLowerCase()) ||
-        lead.phone.toLowerCase().includes(term.toLowerCase()) ||
-        getStageDisplayName(lead.stage).toLowerCase().includes(term.toLowerCase()) ||
-        lead.counsellor.toLowerCase().includes(term.toLowerCase()) ||
-        (lead.email && lead.email.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.occupation && lead.occupation.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.location && lead.location.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.currentSchool && lead.currentSchool.toLowerCase().includes(term.toLowerCase())) ||
-        (lead.source && lead.source.toLowerCase().includes(term.toLowerCase()))
-      );
+  lead.id.toString().includes(term) ||
+  lead.parentsName.toLowerCase().includes(term.toLowerCase()) ||
+  lead.kidsName.toLowerCase().includes(term.toLowerCase()) ||
+  lead.phone.toLowerCase().includes(term.toLowerCase()) ||
+  getStageDisplayName(lead.stage).toLowerCase().includes(term.toLowerCase()) ||
+  lead.counsellor.toLowerCase().includes(term.toLowerCase()) ||
+  (lead.email && lead.email.toLowerCase().includes(term.toLowerCase())) ||
+  (lead.occupation && lead.occupation.toLowerCase().includes(term.toLowerCase())) ||
+  (lead.location && lead.location.toLowerCase().includes(term.toLowerCase())) ||
+  (lead.currentSchool && lead.currentSchool.toLowerCase().includes(term.toLowerCase())) ||
+  (lead.source && lead.source.toLowerCase().includes(term.toLowerCase()))
+);
       setFilteredLeads(filtered);
     }
   };
@@ -837,20 +838,21 @@ if (oldStageKey !== newStageKey) {
   const getDisplayLeads = () => {
     let filtered = leadsData.filter(lead => lead.category === 'Enrolled');
     
-    if (searchTerm.trim() !== '') {
-      filtered = filtered.filter(lead => 
-        lead.parentsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.kidsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStageDisplayName(lead.stage).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.counsellor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.occupation && lead.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.location && lead.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.currentSchool && lead.currentSchool.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
+   if (searchTerm.trim() !== '') {
+  filtered = filtered.filter(lead => 
+    lead.id.toString().includes(searchTerm) ||
+    lead.parentsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.kidsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    getStageDisplayName(lead.stage).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.counsellor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.occupation && lead.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.location && lead.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.currentSchool && lead.currentSchool.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+}
     
     return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, sourceFilters, getStageDisplayName, getStageKeyFromName);
   };
