@@ -29,6 +29,7 @@ import InfoTab from './InfoTab';
 import ActionTab from './ActionTab';
 import { scheduleReminders, cancelReminders } from '../utils/api';
 
+
 // Add debounce utility
 function debounce(func, wait) {
   let timeout;
@@ -236,131 +237,131 @@ const LeadSidebar = ({
   };
 
   // Handle stage submit (auto-submit on Enter or blur)
-  // Handle stage submit (auto-submit on Enter or blur)
-const handleSidebarStageSubmit = async () => {
-  // If stage hasn't changed, just close
-  if (stageEditState.originalStage === stageEditState.selectedStage) {
-    setStageEditState(prev => ({
-      ...prev,
-      comment: '',
-      showComment: false
-    }));
-    return;
-  }
+  const handleSidebarStageSubmit = async () => {
+    // If stage hasn't changed, just close
+    if (stageEditState.originalStage === stageEditState.selectedStage) {
+      setStageEditState(prev => ({
+        ...prev,
+        comment: '',
+        showComment: false
+      }));
+      return;
+    }
 
-  // If no comment and stage changed, revert to original
-  if (!stageEditState.comment.trim()) {
-    setStageEditState(prev => ({
-      ...prev,
-      selectedStage: prev.originalStage,
-      comment: '',
-      showComment: false
-    }));
-    return;
-  }
+    // If no comment and stage changed, revert to original
+    if (!stageEditState.comment.trim()) {
+      setStageEditState(prev => ({
+        ...prev,
+        selectedStage: prev.originalStage,
+        comment: '',
+        showComment: false
+      }));
+      return;
+    }
 
-  try {
-    const oldStageKey = stageEditState.originalStage;
-    const newStageKey = stageEditState.selectedStage;
+    try {
+      const oldStageKey = stageEditState.originalStage;
+      const newStageKey = stageEditState.selectedStage;
 
-    const oldStageName = getLeadStageDisplayName(oldStageKey);
-    const newStageName = getLeadStageDisplayName(newStageKey);
+      const oldStageName = getLeadStageDisplayName(oldStageKey);
+      const newStageName = getLeadStageDisplayName(newStageKey);
 
-    const updatedScore = getStageScore(newStageKey);
-    const updatedCategory = contextGetStageCategory(newStageKey);
+      const updatedScore = getStageScore(newStageKey);
+      const updatedCategory = contextGetStageCategory(newStageKey);
 
-    // ✅ NEW: Track achievement BEFORE updating the lead
-    if (oldStageKey !== newStageKey) {
-      console.log('🎯 Stage changed in sidebar, tracking achievement...');
-      
-      // Get counsellor user_id
-      const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(selectedLead.counsellor);
-      
-      if (!userIdError && userId) {
-        // Record achievement with lead_id and timestamp
-        await achievementsService.recordStageAchievement(
-          selectedLead.counsellor,
-          userId,
-          newStageKey,
-          selectedLead.id
-        );
-      } else {
-        console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', selectedLead.counsellor);
+      // Track achievement BEFORE updating the lead
+      if (oldStageKey !== newStageKey) {
+        console.log('🎯 Stage changed in sidebar, tracking achievement...');
+        
+        // Get counsellor user_id
+        const { userId, error: userIdError } = await achievementsService.getCounsellorUserId(selectedLead.counsellor);
+        
+        if (!userIdError && userId) {
+          // Record achievement with lead_id and timestamp
+          await achievementsService.recordStageAchievement(
+            selectedLead.counsellor,
+            userId,
+            newStageKey,
+            selectedLead.id
+          );
+        } else {
+          console.warn('⚠️ Could not track achievement - counsellor user_id not found for:', selectedLead.counsellor);
+        }
       }
+
+      // Log stage change with comment
+      const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via sidebar.  Comment: "${stageEditState.comment}". Current Stage is  "${newStageName}".`;
+      await logStageChange(selectedLead.id, oldStageName, newStageName, 'sidebar with comment', user.full_name);
+      
+      const { error: logError } = await supabase
+        .from(TABLE_NAMES.LOGS)
+        .insert([{
+          main_action: 'Stage Updated',
+          description: descriptionWithComment,
+          table_name: TABLE_NAMES.LEADS,
+          record_id: selectedLead.id.toString(),
+          action_timestamp: new Date().toISOString(),
+          performed_by: user.full_name
+        }]);
+
+      if (logError) console.error('Error logging stage change with comment:', logError);
+
+      let updateData = { 
+        stage: newStageKey,
+        score: updatedScore, 
+        category: updatedCategory,
+        updated_at: new Date().toISOString()
+      };
+
+      const noResponseKey = getStageKeyFromName('No Response');
+      if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
+        updateData.previous_stage = oldStageKey;
+      }
+
+      if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
+        updateData.previous_stage = null;
+      }
+
+      const { error } = await supabase
+        .from(TABLE_NAMES.LEADS)
+        .update(updateData)
+        .eq('id', selectedLead.id);
+
+      if (error) throw error;
+
+      // Update context state
+      updateLeadStage(selectedLead.id, newStageKey, getStageScore, contextGetStageCategory, getLeadStageDisplayName);
+
+      // Refresh activity data
+      if (onRefreshActivityData) {
+        await onRefreshActivityData();
+      }
+
+      // Refresh single lead to get updated data
+      if (onRefreshSingleLead) {
+        await onRefreshSingleLead(selectedLead.id);
+      }
+
+      // Reset stage edit state
+      setStageEditState({
+        originalStage: newStageKey,
+        selectedStage: newStageKey,
+        comment: '',
+        showComment: false
+      });
+
+      // Refresh history if on history tab
+      if (activeTab === 'history') {
+        fetchHistory();
+      }
+
+      alert('Stage updated successfully');
+      
+    } catch (error) {
+      console.error('Error updating stage:', error);
+      alert('Error updating stage: ' + error.message);
     }
-
-    // Log stage change with comment
-    const descriptionWithComment = `Stage changed from "${oldStageName}" to "${newStageName}" via sidebar.  Comment: "${stageEditState.comment}". Current Stage is  "${newStageName}".`;
-    await logStageChange(selectedLead.id, oldStageName, newStageName, 'sidebar with comment');
-    
-    const { error: logError } = await supabase
-      .from(TABLE_NAMES.LOGS)
-      .insert([{
-        main_action: 'Stage Updated',
-        description: descriptionWithComment,
-        table_name: TABLE_NAMES.LEADS,
-        record_id: selectedLead.id.toString(),
-        action_timestamp: new Date().toISOString()
-      }]);
-
-    if (logError) console.error('Error logging stage change with comment:', logError);
-
-    let updateData = { 
-      stage: newStageKey,
-      score: updatedScore, 
-      category: updatedCategory,
-      updated_at: new Date().toISOString()
-    };
-
-    const noResponseKey = getStageKeyFromName('No Response');
-    if (newStageKey === noResponseKey && oldStageKey !== noResponseKey) {
-      updateData.previous_stage = oldStageKey;
-    }
-
-    if (oldStageKey === noResponseKey && newStageKey !== noResponseKey) {
-      updateData.previous_stage = null;
-    }
-
-    const { error } = await supabase
-      .from(TABLE_NAMES.LEADS)
-      .update(updateData)
-      .eq('id', selectedLead.id);
-
-    if (error) throw error;
-
-    // Update context state
-    updateLeadStage(selectedLead.id, newStageKey, getStageScore, contextGetStageCategory, getLeadStageDisplayName);
-
-    // Refresh activity data
-    if (onRefreshActivityData) {
-      await onRefreshActivityData();
-    }
-
-    // Refresh single lead to get updated data
-    if (onRefreshSingleLead) {
-      await onRefreshSingleLead(selectedLead.id);
-    }
-
-    // Reset stage edit state
-    setStageEditState({
-      originalStage: newStageKey,
-      selectedStage: newStageKey,
-      comment: '',
-      showComment: false
-    });
-
-    // Refresh history if on history tab
-    if (activeTab === 'history') {
-      fetchHistory();
-    }
-
-    alert('Stage updated successfully');
-    
-  } catch (error) {
-    console.error('Error updating stage:', error);
-    alert('Error updating stage: ' + error.message);
-  }
-};
+  };
 
   // Handle blur/outside click on comment field
   const handleSidebarStageBlur = () => {
@@ -406,7 +407,7 @@ const handleSidebarStageSubmit = async () => {
       };
       
       // Don't wait for logging - do it in background
-      logWhatsAppMessage(selectedLead.id, stageField, stageNames[stageField]);
+      logWhatsAppMessage(selectedLead.id, stageField, stageNames[stageField], user.full_name);
       
       // Only refresh history if user is viewing history tab
       if (activeTab === 'history') {
@@ -573,7 +574,7 @@ const handleSidebarStageSubmit = async () => {
     }
 
     try {
-      await logManualEntry(selectedLead.id, manualAction, manualDetails);
+      await logManualEntry(selectedLead.id, manualAction, manualDetails, user.full_name);
       setManualAction('');
       setManualDetails('');
       fetchHistory();
@@ -761,7 +762,8 @@ const handleSidebarStageSubmit = async () => {
               selectedLead.id,
               meetingDate,
               meetingTime,
-              sidebarFormData.meetingLink
+              sidebarFormData.meetingLink,
+              user.full_name
             );
           }
         }
@@ -776,7 +778,8 @@ const handleSidebarStageSubmit = async () => {
               selectedLead.id,
               visitDate,
               visitTime,
-              sidebarFormData.visitLocation
+              sidebarFormData.visitLocation,
+              user.full_name
             );
           }
         }
@@ -788,7 +791,8 @@ const handleSidebarStageSubmit = async () => {
           await logAction(
             selectedLead.id, 
             'Notes Updated', 
-            `Notes changed from "${oldNotes.substring(0, 50)}${oldNotes.length > 50 ? '...' : ''}" to "${newNotes.substring(0, 50)}${newNotes.length > 50 ? '...' : ''}"`
+            `Notes changed from "${oldNotes.substring(0, 50)}${oldNotes.length > 50 ? '...' : ''}" to "${newNotes.substring(0, 50)}${newNotes.length > 50 ? '...' : ''}"`,
+            user.full_name
           );
           
           // Remove notes from changes so it's not logged again in the general update
@@ -798,7 +802,7 @@ const handleSidebarStageSubmit = async () => {
         // Log a general update summary for all OTHER changes (excluding notes)
         if (Object.keys(changes).length > 0) {
           const changeDescription = generateChangeDescription(changes, getFieldLabel);
-          await logAction(selectedLead.id, 'Lead Information Updated', `Updated via sidebar: ${changeDescription}`);
+          await logAction(selectedLead.id, 'Lead Information Updated', `Updated via sidebar: ${changeDescription}`, user.full_name);
         }
         
         // Refresh activity data after logging
@@ -919,50 +923,41 @@ const handleSidebarStageSubmit = async () => {
   
   // Helper to format history descriptions with highlighted current stage
   const formatHistoryDescription = (description) => {
-  const searchText = 'Current Stage is';
-  const startIndex = description.indexOf(searchText);
-  
-  // If "Current Stage is" not found, return as-is
-  if (startIndex === -1) {
-    return description;
-  }
-  
-  // Find the opening quote after "Current Stage is"
-  const quoteStart = description.indexOf('"', startIndex);
-  if (quoteStart === -1) {
-    return description;
-  }
-  
-  // Find the closing quote
-  const quoteEnd = description.indexOf('"', quoteStart + 1);
-  if (quoteEnd === -1) {
-    return description;
-  }
-  
-  // Split into three parts
-  const beforeHighlight = description.substring(0, startIndex);
-  const highlightText = description.substring(startIndex, quoteEnd + 1);
-  const afterHighlight = description.substring(quoteEnd + 1);
-  
-  return (
-    <>
-      {beforeHighlight}
-      <strong 
-        style={{ 
-          color: '#2563eb',
-          backgroundColor: '#dbeafe',
-          padding: '2px 6px',
-          borderRadius: '4px',
-          fontWeight: '600',
-          fontSize:'12px'
-        }}
-      >
-        {highlightText}
-      </strong>
-      {afterHighlight}
-    </>
-  );
-};
+    const searchText = 'Current Stage is';
+    const startIndex = description.indexOf(searchText);
+    
+    // If "Current Stage is" not found, return as-is
+    if (startIndex === -1) {
+      return description;
+    }
+    
+    // Find the opening quote after "Current Stage is"
+    const quoteStart = description.indexOf('"', startIndex);
+    if (quoteStart === -1) {
+      return description;
+    }
+    
+    // Find the closing quote
+    const quoteEnd = description.indexOf('"', quoteStart + 1);
+    if (quoteEnd === -1) {
+      return description;
+    }
+    
+    // Split into three parts
+    const beforeHighlight = description.substring(0, startIndex);
+    const highlightText = description.substring(startIndex, quoteEnd + 1);
+    const afterHighlight = description.substring(quoteEnd + 1);
+    
+    return (
+      <>
+        {beforeHighlight}
+        <strong className="history-current-stage-highlight">
+          {highlightText}
+        </strong>
+        {afterHighlight}
+      </>
+    );
+  };
 
   if (!showSidebar) return null;
 
@@ -985,11 +980,11 @@ const handleSidebarStageSubmit = async () => {
       >
         {/* Header with Parent Name and Lead ID */}
         <div className="lead-sidebar-header">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div className="lead-sidebar-header-info">
             <h5 className="lead-sidebar-title">
               {selectedLead?.parentsName}
             </h5>
-            <div style={{ fontSize: '12px', color: '#666', fontWeight: '500' }}>
+            <div className="lead-sidebar-lead-id">
               Lead ID: {selectedLead?.id}
             </div>
           </div>
@@ -1058,28 +1053,13 @@ const handleSidebarStageSubmit = async () => {
                 <label className="lead-sidebar-stage-label">
                   Stage
                 </label>
-                <div 
-                  style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    gap: '8px',
-                    width: '100%'
-                  }}
-                >
+                <div className="lead-sidebar-stage-container">
                   <select
                     value={stageEditState.selectedStage || ''}
                     onChange={handleSidebarStageChange}
-                    className="lead-sidebar-form-select"
+                    className="lead-sidebar-stage-select"
                     style={{
-                      backgroundColor: getStageColorForLead(stageEditState.selectedStage),
-                      color: '#333',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      fontSize: '13px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      border: '1px solid #ddd', 
-                      width:'160px'
+                      backgroundColor: getStageColorForLead(stageEditState.selectedStage)
                     }}
                   >
                     {stages.map(stage => (
@@ -1101,14 +1081,7 @@ const handleSidebarStageSubmit = async () => {
                       }}
                       onBlur={handleSidebarStageBlur}
                       placeholder="Enter comment (required)"
-                      className="lead-sidebar-form-input"
-                      style={{
-                        padding: '6px 8px',
-                        fontSize: '13px',
-                        border: '1px solid #ddd',
-                        borderRadius: '6px',
-                        outline: 'none'
-                      }}
+                      className="lead-sidebar-stage-comment-input"
                       autoFocus
                     />
                   )}
@@ -1386,6 +1359,11 @@ const handleSidebarStageSubmit = async () => {
                             minute: '2-digit',
                             hour12: true
                           })}
+                          {entry.performed_by && (
+                            <span className="lead-sidebar-performed-by">
+                              by {entry.performed_by}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1431,19 +1409,7 @@ const handleSidebarStageSubmit = async () => {
                 </>
               ) : (
                 // User does NOT have edit permission - show View Only badge
-                <div style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#f3f4f6',
-                  color: '#6b7280',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  border: '1px solid #e5e7eb'
-                }}>
+                <div className="lead-sidebar-view-only-badge">
                   <Eye size={16} />
                   View Only
                 </div>
