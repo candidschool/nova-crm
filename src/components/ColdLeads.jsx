@@ -880,19 +880,20 @@ if (oldStageKey !== newStageKey) {
     let filtered = leadsData.filter(lead => lead.category === 'Cold');
     
     if (searchTerm.trim() !== '') {
-      filtered = filtered.filter(lead => 
-        lead.parentsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.kidsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStageDisplayName(lead.stage).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.counsellor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.occupation && lead.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.location && lead.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.currentSchool && lead.currentSchool.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
+  filtered = filtered.filter(lead => 
+    lead.id.toString().includes(searchTerm) ||
+    lead.parentsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.kidsName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    getStageDisplayName(lead.stage).toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.counsellor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.occupation && lead.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.location && lead.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.currentSchool && lead.currentSchool.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+}
     
     return applyFilters(filtered, counsellorFilters, stageFilters, statusFilters, sourceFilters, getStageDisplayName, getStageKeyFromName);
   };
