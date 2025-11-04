@@ -507,7 +507,8 @@ const FollowUpTable = ({ onLogout, user }) => {
           lead_id: followUpStatusModal.leadId,
           main_action: 'Follow-up Status Updated',
           description: descriptionWithComment,
-          action_timestamp: new Date().toISOString()
+          action_timestamp: new Date().toISOString(),
+          performed_by: user.full_name
         }]);
 
       if (logError) {
@@ -625,7 +626,7 @@ const FollowUpTable = ({ onLogout, user }) => {
     }
   };
 
-  // MAIN FETCH FUNCTION - UPDATED WITH OPTIMIZED BATCH CUSTOM FIELDS FETCHING
+  // ✅ MAIN FETCH FUNCTION - WITH ROLE-BASED ACCESS CONTROL
   const fetchFollowUpLeads = async () => {
     try {
       setLoading(true);
@@ -663,7 +664,7 @@ const FollowUpTable = ({ onLogout, user }) => {
       console.log('✅ Unique lead IDs:', uniqueLeadIds.length);
 
       // Step 3: Fetch leads
-      const { data: leadsResponse, error: leadsError } = await supabase
+      let { data: leadsResponse, error: leadsError } = await supabase
         .from(TABLE_NAMES.LEADS)
         .select('*')
         .in('id', uniqueLeadIds);
@@ -675,8 +676,21 @@ const FollowUpTable = ({ onLogout, user }) => {
 
       console.log('✅ Leads fetched:', leadsResponse?.length || 0);
 
-      // Step 4: BATCH FETCH CUSTOM FIELDS FOR ALL LEADS
-      const customFieldsMap = await settingsService.getCustomFieldsForLeads(uniqueLeadIds);
+      // ✅ ROLE-BASED FILTERING - APPLY HERE
+      console.log('=== APPLYING ROLE-BASED FILTERING ===');
+      if (user.role !== 'admin' && user.role !== 'jr_counselor') {
+        // Filter to only counsellor's own leads
+        const beforeFilterCount = leadsResponse.length;
+        leadsResponse = leadsResponse.filter(lead => lead.counsellor === user.full_name);
+        console.log(`🔒 Role: ${user.role} - Filtered from ${beforeFilterCount} to ${leadsResponse.length} leads`);
+        console.log(`🔒 Showing only leads assigned to: ${user.full_name}`);
+      } else {
+        console.log(`👑 Role: ${user.role} - Showing all ${leadsResponse.length} leads`);
+      }
+
+      // Step 4: BATCH FETCH CUSTOM FIELDS FOR FILTERED LEADS
+      const filteredLeadIds = leadsResponse.map(lead => lead.id);
+      const customFieldsMap = await settingsService.getCustomFieldsForLeads(filteredLeadIds);
 
       // Step 5: Convert leads with custom fields
       const leadsMap = {};
@@ -689,19 +703,21 @@ const FollowUpTable = ({ onLogout, user }) => {
 
       setLeadsData(leadsResponse.map(dbRecord => leadsMap[dbRecord.id]));
 
-      // Step 6: Create rows
-      const rows = followUpsData.map(followUp => ({
-        rowId: `${followUp.lead_id}-${followUp.id}`,
-        followUpId: followUp.id,
-        followUpDate: followUp.follow_up_date,
-        followUpDetails: followUp.details,
-        followUpStatus: followUp.status || 'Not Done',
-        followUpCreatedAt: followUp.created_at,
-        leadData: leadsMap[followUp.lead_id] || {},
-        allFollowUpsForLead: followUpsData.filter(f => f.lead_id === followUp.lead_id)
-      }));
+      // Step 6: Create rows - ONLY for filtered leads
+      const rows = followUpsData
+        .filter(followUp => leadsMap[followUp.lead_id]) // Only include follow-ups for accessible leads
+        .map(followUp => ({
+          rowId: `${followUp.lead_id}-${followUp.id}`,
+          followUpId: followUp.id,
+          followUpDate: followUp.follow_up_date,
+          followUpDetails: followUp.details,
+          followUpStatus: followUp.status || 'Not Done',
+          followUpCreatedAt: followUp.created_at,
+          leadData: leadsMap[followUp.lead_id] || {},
+          allFollowUpsForLead: followUpsData.filter(f => f.lead_id === followUp.lead_id)
+        }));
 
-      console.log('✅ Total rows created:', rows.length);
+      console.log('✅ Total rows created after role filtering:', rows.length);
       console.log('=== FOLLOW-UP LEADS FETCH COMPLETE ===');
       
       setFollowUpRowsData(rows);
