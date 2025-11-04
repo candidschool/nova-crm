@@ -6805,3 +6805,79 @@
     transform: rotate(360deg);
   }
   }
+
+/* Stage Select Styles */
+.lead-sidebar-stage-select {
+  color: #333;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #ddd;
+  width: 160px;
+}
+
+/* Stage Container */
+.lead-sidebar-stage-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Stage Comment Input */
+.lead-sidebar-stage-comment-input {
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  outline: none;
+}
+
+/* Header Info Container */
+.lead-sidebar-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Lead ID Display */
+.lead-sidebar-lead-id {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+/* History Current Stage Highlight */
+.history-current-stage-highlight {
+  color: #2563eb;
+  background-color: #dbeafe;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Performed By Label in History */
+.lead-sidebar-performed-by {
+  margin-left: 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* View Only Badge */
+.lead-sidebar-view-only-badge {
+  padding: 10px 20px;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+}
+
