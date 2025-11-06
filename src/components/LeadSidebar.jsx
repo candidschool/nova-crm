@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { formatISTTime } from '../utils/timezone';
 import { achievementsService } from '../services/achievementsService';
 import { useSettingsData } from '../contexts/SettingsDataProvider';
 import { supabase } from '../lib/supabase';
@@ -1268,14 +1269,7 @@ const LeadSidebar = ({
                               {followUp.details}
                             </div>
                             <div className="lead-sidebar-follow-up-time">
-                              Added {new Date(followUp.created_at).toLocaleDateString('en-GB', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                hour12: true
-                              })}
+                              Added {formatISTTime(followUp.created_at)}
                             </div>
                           </div>
                         </div>
