@@ -201,18 +201,12 @@ const ImportLeadsModal = ({ isOpen, onClose, onComplete }) => {
       return { isDuplicate: true, phone: fullPhone };
     }
 
-    // Source fallback
-    if (!source || source.toString().trim() === '') {
-      source = 'NA';
-    } else {
-      // Check if source exists in settings
-      const sourceExists = settingsData.sources.some(s => 
-        s.name.toLowerCase() === source.toString().toLowerCase()
-      );
-      if (!sourceExists) {
-        source = 'NA';
-      }
-    }
+    // Source fallback - accept any value from sheet, only use NA if empty
+if (!source || source.toString().trim() === '') {
+  source = 'NA';
+} else {
+  source = source.toString().trim();
+}
 
     // Grade fallback
     if (!grade || grade.toString().trim() === '') {
