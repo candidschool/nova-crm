@@ -1119,7 +1119,7 @@ if (oldStageKey !== newStageKey) {
         <div className="nova-table-container" style={{ marginTop: (counsellorFilters.length > 0 || 
                 stageFilters.length > 0 || 
                 statusFilters.length > 0 || 
-                sourceFilters.length > 0) ? '65px' : '30px'}}>
+                sourceFilters.length > 0) ? '75px' : '30px'}}>
           <table className="nova-table">
             <thead>
               <tr>
