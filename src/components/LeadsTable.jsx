@@ -287,7 +287,7 @@ const [sourceFilters, setSourceFilters] = useState([]);
   const handleSelectAllChange = (checked) => {
     setSelectAll(checked);
     if (checked) {
-       const allLeadIds = allFilteredLeads.map(lead => lead.id);
+       const allLeadIds = displayLeads.map(lead => lead.id);
       setSelectedLeads(allLeadIds);
     } else {
       setSelectedLeads([]);
