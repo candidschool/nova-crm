@@ -1116,7 +1116,7 @@ if (oldStageKey !== newStageKey) {
 
         {totalPages > 1 && <PaginationControls />}
 
-        <div className="nova-table-container" style={{marginTop: showFilter ? '85px' : '35px'}}>
+        <div className="nova-table-container" style={{marginTop: showFilter ? '85px' : '30px'}}>
           <table className="nova-table">
             <thead>
               <tr>
