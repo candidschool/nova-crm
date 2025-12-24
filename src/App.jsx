@@ -14,6 +14,7 @@ import SettingsDataProvider from './contexts/SettingsDataProvider';
 import FollowUpTable from './components/FollowUpTable';
 import { authService } from './services/authService';
 import CalendarPage from './components/CalendarPage';
+import DuplicateLeads from './components/DuplicateLeads';
 
 // Wrapper component to handle navigation within Router context
 function AppContent() {
@@ -180,10 +181,13 @@ function AppContent() {
                 path="/calendarpage" 
                 element={<CalendarPage onLogout={handleLogout} user={user} />} 
               />
+
+              <Route 
+                path="/duplicates" 
+                element={<DuplicateLeads onLogout={handleLogout} user={user} />} 
+              />            
               
-              
-              
-              
+                          
               {/* Only show settings to admins */}
               {user.role === 'admin' && (
                 <Route 
