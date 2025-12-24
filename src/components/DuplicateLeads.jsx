@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Trash2,
   Users,
-  Phone
+  Phone,
+  RefreshCw
 } from 'lucide-react';
 
 const DuplicateLeads = ({ onLogout, user }) => {
@@ -55,6 +56,13 @@ const DuplicateLeads = ({ onLogout, user }) => {
     return getStageColor(stageKey);
   };
 
+  // Normalize phone number function
+  const normalizePhone = (phone) => {
+    if (!phone) return null;
+    // Remove all non-numeric characters and leading +91
+    return phone.toString().replace(/\D/g, '').replace(/^91/, '');
+  };
+
   // Fetch duplicate leads
   const fetchDuplicateLeads = async () => {
     try {
@@ -69,17 +77,29 @@ const DuplicateLeads = ({ onLogout, user }) => {
 
       if (leadsError) throw leadsError;
 
-      // Group by phone number
+      console.log('Total leads fetched:', allLeads.length);
+
+      // Group by normalized phone number
       const phoneGroups = {};
+      const skippedLeads = [];
+
       allLeads.forEach(lead => {
-        const phone = lead.phone;
-        if (!phoneGroups[phone]) {
-          phoneGroups[phone] = [];
+        const normalizedPhone = normalizePhone(lead.phone);
+        
+        // Skip leads with no phone number
+        if (!normalizedPhone) {
+          skippedLeads.push(lead.id);
+          return;
         }
-        phoneGroups[phone].push({
+
+        if (!phoneGroups[normalizedPhone]) {
+          phoneGroups[normalizedPhone] = [];
+        }
+        
+        phoneGroups[normalizedPhone].push({
           id: lead.id,
-          parentsName: lead.parents_name,
-          kidsName: lead.kids_name,
+          parentsName: lead.parents_name || '',
+          kidsName: lead.kids_name || '',
           phone: lead.phone,
           secondPhone: lead.second_phone || '',
           email: lead.email || '',
@@ -102,15 +122,29 @@ const DuplicateLeads = ({ onLogout, user }) => {
         });
       });
 
+      // Debug logging
+      console.log('Phone groups created:', Object.keys(phoneGroups).length);
+      console.log('Skipped leads (no phone):', skippedLeads.length);
+
       // Filter only duplicates (phone number appears more than once)
       const duplicates = Object.entries(phoneGroups)
-        .filter(([phone, leads]) => leads.length > 1)
+        .filter(([phone, leads]) => {
+          const isDuplicate = leads.length > 1;
+          if (isDuplicate) {
+            console.log(`Found duplicate group for phone ${phone}:`, leads.length, 'leads');
+          }
+          return isDuplicate;
+        })
         .map(([phone, leads]) => ({
-          phone,
+          phone: leads[0].phone, // Use original phone format from first lead
+          normalizedPhone: phone,
           leads,
           count: leads.length
         }))
         .sort((a, b) => b.count - a.count); // Sort by count (highest first)
+
+      console.log('Total duplicate groups found:', duplicates.length);
+      console.log('Total duplicate leads:', duplicates.reduce((sum, g) => sum + g.count, 0));
 
       setDuplicateGroups(duplicates);
       setLoading(false);
@@ -212,6 +246,7 @@ const DuplicateLeads = ({ onLogout, user }) => {
       const searchLower = searchTerm.toLowerCase();
       return (
         group.phone.includes(searchTerm) ||
+        group.normalizedPhone.includes(searchTerm.replace(/\D/g, '')) ||
         group.leads.some(lead => 
           lead.parentsName.toLowerCase().includes(searchLower) ||
           lead.kidsName.toLowerCase().includes(searchLower) ||
@@ -310,6 +345,25 @@ const DuplicateLeads = ({ onLogout, user }) => {
                   className="search-input"
                 />
               </div>
+              
+              <button 
+                onClick={fetchDuplicateLeads}
+                className="btn"
+                style={{ padding: '8px 16px', fontSize: '14px' }}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" style={{ marginRight: '4px' }} />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} style={{ marginRight: '4px' }} />
+                    Refresh
+                  </>
+                )}
+              </button>
               
               <button 
                 onClick={expandAll}
