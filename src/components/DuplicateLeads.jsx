@@ -1,4 +1,4 @@
-//Duplicated leads check
+//Duplicated leads checknow
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
@@ -71,11 +71,12 @@ const DuplicateLeads = ({ onLogout, user }) => {
       setLoading(true);
       setError(null);
 
-      // Fetch all leads
+      // Fetch all leads (remove default 1000 limit)
       const { data: allLeads, error: leadsError } = await supabase
         .from(TABLE_NAMES.LEADS)
         .select('*')
-        .order('phone', { ascending: true });
+        .order('phone', { ascending: true })
+        .limit(10000); // Increase limit to handle all your leads
 
       if (leadsError) throw leadsError;
 
