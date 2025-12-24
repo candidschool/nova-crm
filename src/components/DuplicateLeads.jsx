@@ -1,3 +1,5 @@
+//Duplicated leads check
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { TABLE_NAMES } from '../config/tableNames';
