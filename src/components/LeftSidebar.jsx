@@ -5,6 +5,7 @@ import {
   BarChart3, 
   Users, 
   TrendingUp, 
+  Phone,
   MessageCircle, 
   Settings, 
   LogOut, 
@@ -169,7 +170,15 @@ const LeftSidebar = ({
               <TrendingUp size={18} className="nav-icon" />
               Calendar View
             </a>
-          
+
+          <a 
+              href="/duplicates" 
+              className={`nova-nav-item ${activeNavItem === "duplicates" ? "active" : ""}`}
+              onClick={closeMobileMenu}
+            >
+              <Phone size={18} className="nav-icon" />
+              Duplicate Leads
+            </a>
           
           
           
