@@ -1,5 +1,4 @@
-//Duplicated leads checknow
-
+//Duplicated leads checknows
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { TABLE_NAMES } from '../config/tableNames';
@@ -71,12 +70,36 @@ const DuplicateLeads = ({ onLogout, user }) => {
       setLoading(true);
       setError(null);
 
-      // Fetch all leads (remove default 1000 limit)
-      const { data: allLeads, error: leadsError } = await supabase
-        .from(TABLE_NAMES.LEADS)
-        .select('*')
-        .order('phone', { ascending: true })
-        .limit(10000); // Increase limit to handle all your leads
+      // Fetch all leads using pagination to bypass limits
+      let allLeads = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      console.log('Starting to fetch all leads with pagination...');
+
+      while (hasMore) {
+        const { data: pageData, error: pageError } = await supabase
+          .from(TABLE_NAMES.LEADS)
+          .select('*')
+          .order('phone', { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (pageError) throw pageError;
+
+        console.log(`Fetched page ${page + 1}: ${pageData.length} leads`);
+        
+        if (pageData.length > 0) {
+          allLeads = [...allLeads, ...pageData];
+          page++;
+        }
+        
+        if (pageData.length < pageSize) {
+          hasMore = false;
+        }
+      }
+
+      const leadsError = null;
 
       if (leadsError) throw leadsError;
 
