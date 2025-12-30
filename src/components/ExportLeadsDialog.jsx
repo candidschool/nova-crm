@@ -40,7 +40,8 @@ const ExportLeadsDialog = ({
         'Source': lead.source || '',
         'Location': lead.location || '',
         'Occupation': lead.occupation || '',
-        'Status': lead.category || ''
+        'Status': lead.category || '',
+        'Notes': lead.notes || ''
       }));
 
       // Create workbook and worksheet
@@ -60,7 +61,8 @@ const ExportLeadsDialog = ({
         { wch: 15 }, // Source
         { wch: 20 }, // Location
         { wch: 20 }, // Occupation
-        { wch: 12 }  // Status
+        { wch: 12 },  // Status
+        { wch: 40 }  // Notes
       ];
       worksheet['!cols'] = columnWidths;
 
@@ -144,6 +146,7 @@ const ExportLeadsDialog = ({
                   <span className="column-badge">Location</span>
                   <span className="column-badge">Occupation</span>
                   <span className="column-badge">Status</span>
+                  <span className="column-badge">Notes</span>
                 </div>
               </div>
 
